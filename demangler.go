@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 )
 
 // http://mentorembedded.github.io/cxx-abi/abi.html#mangling
@@ -46,11 +47,49 @@ func isRefqualifier(mangled string) bool {
 		(mangled[0] == 'O')
 }
 
+// 5.1.4.1 Virtual Tables and RTTI
+// 5.1.4.2 Virtual Override Thunks
+func isSpecialName(mangled string) bool {
+	if len(mangled) < 2 {
+		return false
+	}
+	
+	c0 := mangled[0]
+	c1 := mangled[1]
+	
+	if c0 != 'T' {
+		return false
+	}
+	
+	return (c1 == 'V') || (c1 == 'T') || (c1 == 'I') || (c1 == 'S') ||
+		(c1 == 'h') || (c1 == 'v')
+}
+
 func isNumberChar(c byte) bool {
 	return (c >= '0') && (c <= '9')
 }
 
 func (p *Demangler) unmangle(mangled string) {
+	p.Mangled = mangled
+	p.Remain = mangled
+	
+	if strings.HasPrefix(p.Remain, "_Z") {
+		p.Remain = p.Remain[2:]
+	} else {
+		fmt.Printf("WARN: Not valid mangled name: %v\n", p.Remain)
+		return
+	}
+	
+	p.parseEncoding()
+}
+
+func (p *Demangler) parseEncoding() {
+	if isSpecialName(p.Remain) {
+		p.parseSpecialName()
+	}
+}
+
+func (p *Demangler) parseSpecialName() {
 	
 }
 
@@ -81,10 +120,17 @@ func (p *Demangler) parseRefQualifier() {
 	}
 }
 
+// TODO
 func (p *Demangler) parsePrefix() {
 	
 }
 
+/*
+<unqualified-name> ::= <operator-name>
+                   ::= <ctor-dtor-name>  
+                   ::= <source-name>   
+                   ::= <unnamed-type-name>   
+*/
 func (p *Demangler) parseUnqualifiedName() {
 	var res bool
 	res = p.parseCtorDtorName()
@@ -95,6 +141,11 @@ func (p *Demangler) parseUnqualifiedName() {
 	
 	if !res {
 		res = p.parseUnnamedTypeName()
+	}
+	
+	if !res {
+		//s := p.parseSourceName()
+		
 	}
 }
 
@@ -260,6 +311,7 @@ func (p *Demangler) parseTemplatePrefix() {
 	
 }
 
+// <source-name> ::= <positive length number> <identifier>
 func (p *Demangler) parseSourceName() string {
 	if len(p.Remain) < 2 {
 		return ""
@@ -272,13 +324,12 @@ func (p *Demangler) parseSourceName() string {
 		charLen = (int(c0 - '0') * 10) + int(c1 - '0')
 		p.Remain = p.Remain[2:]
 		
-		s := p.Remain[0:charLen]
-		return s
+		return p.parseIdentifier(charLen)
 	} else if isNumberChar(c0) {
 		charLen = int(c0 - '0')
 		p.Remain = p.Remain[1:]
-		s := p.Remain[0:charLen]
-		return s
+		
+		return p.parseIdentifier(charLen)
 	} else {
 		// some error
 		fmt.Printf("WARN: Invalid source name: %v\n", p.Remain)
@@ -286,6 +337,15 @@ func (p *Demangler) parseSourceName() string {
 	}
 }
 
-func (p *Demangler) parseIdentifier() {
+func (p *Demangler) parseIdentifier(size int) string {
+	s := p.Remain[0:size]
+	return s
+}
+
+func (p *Demangler) parseType() {
+	
+}
+
+func (p *Demangler) parseBuildinType() {
 	
 }
