@@ -7,6 +7,8 @@ import (
 
 // http://mentorembedded.github.io/cxx-abi/abi.html#mangling
 func demangle(mangledname string) string {
+	var d Demangler
+	d.unmangle(mangledname)
 	return ""
 }
 
@@ -89,13 +91,86 @@ func (p *Demangler) parseEncoding() {
 	}
 }
 
-func (p *Demangler) parseSpecialName() {
+// Virtual Tables and RTTI
+func isVirtualTableAndRTTI(mangledname string) bool {
+	if len(mangledname) < 2 {
+		return false
+	}
 	
+	nm := mangledname[0:2]
+	return (nm == "TV") || (nm == "TT") || (nm == "TI") || (nm == "TS")
+}
+
+func (p *Demangler) parseVirtualTableAndRTTI() {
+	nm := p.Remain[0:2]
+	// Virtual Tables and RTTI
+	if nm == "TV" {
+		p.Remain = p.Remain[2:]
+		p.parseType()
+	} else if nm == "TT" {
+		p.Remain = p.Remain[2:]
+		p.parseType()
+	} else if nm == "TI" {
+		p.Remain = p.Remain[2:]
+		p.parseType()
+	} else if nm == "TS" {
+		p.Remain = p.Remain[2:]
+		p.parseType()
+	} else {
+		fmt.Printf("WARN: Not valid VirtualTableAndRTTI: %v\n", p.Remain)
+	}
+}
+
+// Virtual Tables and RTTI
+func isVirtualOverrideTrunks(mangledname string) bool {
+	if len(mangledname) < 2 {
+		return false
+	}
+	
+	nm := mangledname[0:2]
+	return (nm == "Th") || (nm == "Tv") || (nm == "Tc")
+}
+
+func (p *Demangler) parseVirtualOverrideTrunks() {
+	// Virtual Tables and RTTI
+	nm := p.Remain[0:2]
+	if nm == "Th" {
+		p.Remain = p.Remain[2:]
+		
+		// TODO parse offset number		
+		panic("Not implemented")
+	} else if nm == "Tv" {
+		p.Remain = p.Remain[2:]
+		// TODO parse offset number
+		panic("Not implemented")
+	} else if nm == "Tc" {
+		p.Remain = p.Remain[2:]
+		// TODO parse offset number
+		panic("Not implemented")
+	} else {
+		fmt.Printf("WARN: Not valid VirtualOverrideTrunks: %v\n", p.Remain)
+	}
+}
+
+func (p *Demangler) parseSpecialName() {
+	if isVirtualTableAndRTTI(p.Remain) {
+		p.parseVirtualTableAndRTTI()
+	} else if isVirtualOverrideTrunks(p.Remain) {
+		p.parseVirtualOverrideTrunks()
+	} else {
+		fmt.Printf("WARN: Unknown SpecialName: %v\n", p.Remain)
+	}
+}
+
+func (p *Demangler) parseName() {
+	if isNestedName(p.Remain) {
+		p.parseNestedName()
+	}
 }
 
 func (p *Demangler) parseNestedName() {
 	if !isNestedName(p.Remain) {
-		fmt.Printf("Mangled remain not a nested name: %v\n", p.Remain)
+		fmt.Printf("WARN:Mangled remain not a nested name: %v\n", p.Remain)
 		return
 	}
 	
@@ -131,137 +206,148 @@ func (p *Demangler) parsePrefix() {
                    ::= <source-name>   
                    ::= <unnamed-type-name>   
 */
-func (p *Demangler) parseUnqualifiedName() {
+func (p *Demangler) parseUnqualifiedName() string {
 	var res bool
+	var nm string
 	res = p.parseCtorDtorName()
+	if res {
+		return ""
+	}
 	
-	if !res {
-		res = p.parseOperatorName()
+	res, nm = parseOperatorName(p.Remain)	
+	if res {
+		p.Remain = p.Remain[2:]
+		return nm
 	}
 	
 	if !res {
 		res = p.parseUnnamedTypeName()
+	} else {
+		p.Remain = p.Remain[2:]
+		return nm
 	}
 	
 	if !res {
 		//s := p.parseSourceName()
 		
 	}
+	
+	return ""
 }
 
-func (p *Demangler) parseOperatorName() bool {
-	if len(p.Remain) < 2 {
-		return false
+func parseOperatorName(mangledname string) (bool, string) {
+	var nm string
+	if len(mangledname) < 2 {
+		return false, ""
 	}
 	
-	op := p.Remain[0:2]
+	op := mangledname[0:2]
 	if (op == "nw") {
-		p.FuncName = "new"
+		nm = "new"
 	} else if (op == "na") {
-		p.FuncName = "new[]"
+		nm = "new[]"
 	} else if (op == "dl") {
-		p.FuncName = "delete"
+		nm = "delete"
 	} else if (op == "da") {
-		p.FuncName = "delete[]"
+		nm = "delete[]"
 	} else if (op == "ps") {
-		p.FuncName = "+ (unary)"
+		nm = "+ (unary)"
 	} else if (op == "ng") {
-		p.FuncName = "- (unary)"
+		nm = "- (unary)"
 	} else if (op == "ad") {
-		p.FuncName = "& (unary)"
+		nm = "& (unary)"
 	} else if (op == "de") {
-		p.FuncName = "* (unary)"
+		nm = "* (unary)"
 	} else if (op == "co") {
-		p.FuncName = "~"
+		nm = "~"
 	} else if (op == "pl") {
-		p.FuncName = "+"
+		nm = "+"
 	} else if (op == "mi") {
-		p.FuncName = "-"
+		nm = "-"
 	} else if (op == "ml") {
-		p.FuncName = "*"
+		nm = "*"
 	} else if (op == "dv") {
-		p.FuncName = "/"
+		nm = "/"
 	} else if (op == "rm") {
-		p.FuncName = "%"
+		nm = "%"
 	} else if (op == "an") {
-		p.FuncName = "&"
+		nm = "&"
 	} else if (op == "or") {
-		p.FuncName = "|"
+		nm = "|"
 	} else if (op == "eo") {
-		p.FuncName = "^"
+		nm = "^"
 	} else if (op == "aS") {
-		p.FuncName = "="
+		nm = "="
 	} else if (op == "pL") {
-		p.FuncName = "+="
+		nm = "+="
 	} else if (op == "mI") {
-		p.FuncName = "-="
+		nm = "-="
 	} else if (op == "mL") {
-		p.FuncName = "*="
+		nm = "*="
 	} else if (op == "dV") {
-		p.FuncName = "/="
+		nm = "/="
 	} else if (op == "rM") {
-		p.FuncName = "%="
+		nm = "%="
 	} else if (op == "aN") {
-		p.FuncName = "&="
+		nm = "&="
 	} else if (op == "oR") {
-		p.FuncName = "|="
+		nm = "|="
 	} else if (op == "eO") {
-		p.FuncName = "^="
+		nm = "^="
 	} else if (op == "ls") {
-		p.FuncName = "<<"
+		nm = "<<"
 	} else if (op == "rs") {
-		p.FuncName = ">>"
+		nm = ">>"
 	} else if (op == "lS") {
-		p.FuncName = "<<="
+		nm = "<<="
 	} else if (op == "rS") {
-		p.FuncName = ">>="
+		nm = ">>="
 	} else if (op == "eq") {
-		p.FuncName = "=="
+		nm = "=="
 	} else if (op == "ne") {
-		p.FuncName = "!="
+		nm = "!="
 	} else if (op == "lt") {
-		p.FuncName = "<"
+		nm = "<"
 	} else if (op == "gt") {
-		p.FuncName = ">"
+		nm = ">"
 	} else if (op == "le") {
-		p.FuncName = "<="
+		nm = "<="
 	} else if (op == "ge") {
-		p.FuncName = ">="
+		nm = ">="
 	} else if (op == "nt") {
-		p.FuncName = "!"
+		nm = "!"
 	} else if (op == "aa") {
-		p.FuncName = "&&"
+		nm = "&&"
 	} else if (op == "oo") {
-		p.FuncName = "||"
+		nm = "||"
 	} else if (op == "pp") {
-		p.FuncName = "++"
+		nm = "++"
 	} else if (op == "mm") {
-		p.FuncName = "--"
+		nm = "--"
 	} else if (op == "cm") {
-		p.FuncName = ","
+		nm = ","
 	} else if (op == "pm") {
-		p.FuncName = "->*"
+		nm = "->*"
 	} else if (op == "pt") {
-		p.FuncName = "->"
+		nm = "->"
 	} else if (op == "cl") {
-		p.FuncName = "()"
+		nm = "()"
 	} else if (op == "ix") {
-		p.FuncName = "[]"
+		nm = "[]"
 	} else if (op == "qu") {
-		p.FuncName = "?"
+		nm = "?"
 	} else if (op == "cv") {
-		p.FuncName = "(cast)" // ?
+		nm = "(cast)" // ?
 	} else if (op == "li") {
-		p.FuncName = ""
+		nm = ""
 	} else if (op[0] == 'v') {
-		p.FuncName = "" // ?
+		nm = "" // ?
 	} else {
-		p.FuncName = ""
-		return false
+		nm = ""
+		return false, nm
 	}
 	
-	p.Remain = p.Remain[2:]
-	return true
+	return true, nm
 }
 
 func (p *Demangler) parseCtorDtorName() bool {
@@ -346,6 +432,70 @@ func (p *Demangler) parseType() {
 	
 }
 
-func (p *Demangler) parseBuildinType() {
-	
+// Builtin types are represented by single-letter codes
+func parseBuildinType(c0, c1 byte) string {
+	if c0 == 'v' {
+		return "void"
+	} else if c0 == 'w' {
+		return "wchar_t"
+	} else if c0 == 'b' {
+		return "bool"
+	} else if c0 == 'c' {
+		return "char"
+	} else if c0 == 'a' {
+		return "signed char"
+	} else if c0 == 'h' {
+		return "unsigned char"
+	} else if c0 == 's' {
+		return "short"
+	} else if c0 == 't' {
+		return "unsigned short"
+	} else if c0 == 'i' {
+		return "int"
+	} else if c0 == 'j' {
+		return "unsigned int"
+	} else if c0 == 'l' {
+		return "long"
+	} else if c0 == 'm' {
+		return "unsigned long"
+	} else if c0 == 'x' {
+		return "long long"
+	} else if c0 == 'y' {
+		return "unsigned long long"
+	} else if c0 == 'n' {
+		return "__int128"
+	} else if c0 == 'o' {
+		return "unsigned __int128"
+	} else if c0 == 'f' {
+		return "float"
+	} else if c0 == 'd' {
+		return "double"
+	} else if c0 == 'e' {
+		return "long double"
+	} else if c0 == 'g' {
+		return "__float128"
+	} else if c0 == 'z' {
+		return "ellipsis"
+	} else if c0 == 'u' {
+		panic("Not implemented")
+	} else if c0 == 'D' {
+		if (c1 == 'd') || (c1 == 'e') ||
+			(c1 == 'f') || (c1 == 'h') {
+				panic("Not implemented")
+		} else if c1 == 'i' {
+			return "char32_t"
+		} else if c1 == 's' {
+			return "char16_t"
+		} else if c1 == 'a' {
+			return "auto"
+		} else if c1 == 'c' {
+			return "decltype(auto)"
+		} else {
+			fmt.Printf("WARN: Invalid buildin type: [%c, %c]\n", c0, c1)
+			return ""
+		}
+	} else {
+		fmt.Printf("WARN: Invalid buildin type: [%c, %c]\n", c0, c1)
+		return ""
+	}
 }
