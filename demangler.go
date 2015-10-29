@@ -85,9 +85,17 @@ func (p *Demangler) unmangle(mangled string) {
 	p.parseEncoding()
 }
 
+/*
+<mangled-name> ::= _Z <encoding>
+    <encoding> ::= <function name> <bare-function-type>
+	      	   ::= <data name>
+	           ::= <special-name>
+*/
 func (p *Demangler) parseEncoding() {
 	if isSpecialName(p.Remain) {
 		p.parseSpecialName()
+	} else {
+		p.parseName()
 	}
 }
 
@@ -162,9 +170,23 @@ func (p *Demangler) parseSpecialName() {
 	}
 }
 
+/*
+<name> ::= <nested-name>
+	   ::= <unscoped-name>
+	   ::= <unscoped-template-name> <template-args>
+	   ::= <local-name>	# See Scope Encoding below
+
+    <unscoped-name> ::= <unqualified-name>
+		    ::= St <unqualified-name>   # ::std::
+
+    <unscoped-template-name> ::= <unscoped-name>
+			     ::= <substitution>
+*/
 func (p *Demangler) parseName() {
 	if isNestedName(p.Remain) {
 		p.parseNestedName()
+	} else {
+		
 	}
 }
 
@@ -211,6 +233,7 @@ func (p *Demangler) parseUnqualifiedName() string {
 	var nm string
 	res = p.parseCtorDtorName()
 	if res {
+		//  ?
 		return ""
 	}
 	
@@ -220,11 +243,15 @@ func (p *Demangler) parseUnqualifiedName() string {
 		return nm
 	}
 	
-	if !res {
-		res = p.parseUnnamedTypeName()
-	} else {
+	res = p.parseUnnamedTypeName()
+	if res {
 		p.Remain = p.Remain[2:]
-		return nm
+		return nm		
+	}
+	
+	res = p.parseUnnamedTypeName()
+	if res {
+		
 	}
 	
 	if !res {
