@@ -249,13 +249,14 @@ func (p *Demangler) parseUnqualifiedName() string {
 		return nm		
 	}
 	
-	res = p.parseUnnamedTypeName()
-	if res {
-		
+	var keyword string
+	keyword, p.Remain = parseSourceName(p.Remain)
+	if keyword != "" {
+		return keyword
 	}
 	
-	if !res {
-		//s := p.parseSourceName()
+	res, p.Remain = parseUnnamedTypeName(p.Remain)
+	if res {
 		
 	}
 	
@@ -403,6 +404,21 @@ func (p *Demangler) parseCtorDtorName() bool {
 	return true
 }
 
+func parseUnnamedTypeName(mangled string) (isSuccess bool, remain string) {
+	if len(mangled) < 2 {
+		return false, mangled
+	}
+	
+	nm := mangled[0:2]
+	if nm == "Ut" {
+		// TODO
+		fmt.Printf("WARN: parseUnnamedTypeName not implemented! Value: %v\n", mangled)
+		return true, mangled[2:]
+	} else {
+		return false, mangled
+	}
+}
+
 func (p *Demangler) parseUnnamedTypeName() bool {
 	if len(p.Remain) < 2 {
 		return false
@@ -420,43 +436,67 @@ func (p *Demangler) parseUnnamedTypeName() bool {
 	return true
 }
 
+// <source-name> ::= <positive length number> <identifier>
+func parseSourceName(mangled string) (identifier, remain string) {
+	if len(mangled) < 2 {
+		return "", mangled
+	}
+	
+	c0 := mangled[0]
+	c1 := mangled[1]
+	charLen := 0
+	if isNumberChar(c0) && isNumberChar(c1) {
+		charLen = (int(c0 - '0') * 10) + int(c1 - '0')
+		part := mangled[2:]
+		
+		return parseIdentifier(part, charLen)
+	} else if isNumberChar(c0) {
+		charLen = int(c0 - '0')
+		part := mangled[1:]
+		
+		return parseIdentifier(part, charLen)
+	} else {
+		// some error
+		fmt.Printf("WARN: Invalid source name: %v\n", mangled)
+		return "", mangled
+	}
+}
+
+func parseIdentifier(mangled string, size int) (keyword, remain string) {
+	s := mangled[0:size]
+	r := mangled[size:]
+	return s, r
+}
+
 func (p *Demangler) parseTemplatePrefix() {
 	
 }
 
-// <source-name> ::= <positive length number> <identifier>
-func (p *Demangler) parseSourceName() string {
-	if len(p.Remain) < 2 {
-		return ""
-	}
-	
-	c0 := p.Remain[0]
-	c1 := p.Remain[1]
-	charLen := 0
-	if isNumberChar(c0) && isNumberChar(c1) {
-		charLen = (int(c0 - '0') * 10) + int(c1 - '0')
-		p.Remain = p.Remain[2:]
-		
-		return p.parseIdentifier(charLen)
-	} else if isNumberChar(c0) {
-		charLen = int(c0 - '0')
-		p.Remain = p.Remain[1:]
-		
-		return p.parseIdentifier(charLen)
-	} else {
-		// some error
-		fmt.Printf("WARN: Invalid source name: %v\n", p.Remain)
-		return ""
-	}
-}
-
-func (p *Demangler) parseIdentifier(size int) string {
-	s := p.Remain[0:size]
-	return s
-}
-
 func (p *Demangler) parseType() {
+	p.parseCvQualifiers()
+}
+
+func isBuildinType(mangled string) bool {
+	alltype := "vwbcahstijlmxynofdegzu"
+	firstChar := mangled[:1]
+	if strings.Contains(alltype, firstChar) {
+		return true
+	}
 	
+	if firstChar != "D" {
+		return false
+	}
+	
+	if len(mangled) < 2 {
+		return false
+	}
+	
+	secondChar := mangled[1]
+	return (secondChar == 'd') || (secondChar == 'e') ||
+		(secondChar == 'f') || (secondChar == 'h') ||
+		(secondChar == 'i') || (secondChar == 's') ||
+		(secondChar == 'a') || (secondChar == 'c') ||
+		(secondChar == 'n')
 }
 
 // Builtin types are represented by single-letter codes
@@ -522,7 +562,7 @@ func parseBuildinType(c0, c1 byte) string {
 			return ""
 		}
 	} else {
-		fmt.Printf("WARN: Invalid buildin type: [%c, %c]\n", c0, c1)
+		fmt.Printf("WARN: Invalid buildin type 2: [%c, %c]\n", c0, c1)
 		return ""
 	}
 }
