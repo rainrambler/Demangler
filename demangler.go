@@ -12,6 +12,20 @@ func demangle(mangledname string) string {
 	return ""
 }
 
+type ParamType struct {
+	isPointer     bool
+	isRef         bool
+	isRValue      bool
+	isComplex     bool
+	isImaginary   bool
+	isArray       bool
+	isPtrToMember bool
+	isTemplate    bool
+	isDecltype    bool
+	CvQualifiers  []string
+	TypeName      string
+}
+
 type Demangler struct {
 	Mangled      string
 	Remain       string
@@ -208,6 +222,27 @@ func (p *Demangler) parseCvQualifiers() {
 		p.CVqualifiers = append(p.CVqualifiers, p.Remain[0])
 		p.Remain = p.Remain[1:]
 	}
+}
+
+func parseCvQualifiers(mangled string) (cvs []string, remain string) {
+	part := mangled
+	qualifiers := []string{}
+	for isCVqualifier(part) {
+		c := part[0]
+		if c == 'r' {
+			qualifiers = append(qualifiers, "restrict")
+		} else if c == 'V' {
+			qualifiers = append(qualifiers, "volatile")
+		} else if c == 'K' {
+			qualifiers = append(qualifiers, "const")
+		} else {
+			fmt.Printf("WARN: Invalid CV Qualifiers: %v\n", mangled)
+		}
+		
+		part = part[1:]
+	}
+	
+	return qualifiers, part
 }
 
 func (p *Demangler) parseRefQualifier() {
@@ -472,8 +507,46 @@ func (p *Demangler) parseTemplatePrefix() {
 	
 }
 
-func (p *Demangler) parseType() {
-	p.parseCvQualifiers()
+func (p *Demangler) parseType() ParamType {
+	var tp ParamType
+	qualifiers := []string{}
+	qualifiers, p.Remain = parseCvQualifiers(p.Remain)
+	tp.CvQualifiers = append(tp.CvQualifiers, qualifiers...)
+	
+	c0 := p.Remain[0]
+	if c0 == 'P' {
+		tp.isPointer = true
+		p.Remain =  p.Remain[1:]
+	} else if c0 == 'R' {
+		tp.isRef = true
+		p.Remain =  p.Remain[1:]
+	} else if c0 == 'O' {
+		tp.isRValue = true
+		p.Remain =  p.Remain[1:]
+	} else if c0 == 'C' {
+		tp.isComplex = true
+		p.Remain =  p.Remain[1:]
+	} else if c0 == 'G' {
+		tp.isImaginary = true
+		p.Remain =  p.Remain[1:]
+	} else if c0 == 'U' {
+		panic("Not implemented")
+	}
+	
+	c1 := p.Remain[0]
+	if c1 == 'A' {
+		// array type
+		tp.isArray = true
+		p.Remain =  p.Remain[1:]
+	} else if c1 == 'M' {
+		panic("Not Implemented")
+	} else if c1 == 'T' {
+		// Template parameters
+		panic("Not Implemented")
+	}
+	
+	// TODO
+	return tp
 }
 
 func isBuildinType(mangled string) bool {
