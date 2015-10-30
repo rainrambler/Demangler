@@ -34,6 +34,8 @@ type Demangler struct {
 	FuncName     string
 	isCtor       bool
 	isDtor       bool
+	isStd        bool // from St <unqualified-name>   # ::std::
+	AllParams    []ParamType
 }
 
 func isNestedName(mangled string) bool {
@@ -110,7 +112,19 @@ func (p *Demangler) parseEncoding() {
 		p.parseSpecialName()
 	} else {
 		p.parseName()
+		p.parseBareFunctionTypes()
 	}
+}
+
+func (p *Demangler) parseBareFunctionTypes() {
+	for len(p.Remain) > 0 {
+		p.parseBareFunctionType()
+	}
+}
+
+func (p *Demangler) parseBareFunctionType() {
+	pt := p.parseType()
+	p.AllParams = append(p.AllParams, pt)
 }
 
 // Virtual Tables and RTTI
@@ -185,6 +199,30 @@ func (p *Demangler) parseSpecialName() {
 }
 
 /*
+<substitution> ::= S <seq-id> _
+		 ::= S_
+*/
+func isSubstitution(mangledname string) bool {
+	if len(mangledname) < 1 {
+		return false
+	}
+	
+	return mangledname[0] == 'S'
+}
+
+// 5.1.4.1 Virtual Tables and RTTI
+// 5.1.4.2 Virtual Override Thunks
+func isLocalName(mangled string) bool {
+	if len(mangled) < 1 {
+		return false
+	}
+	
+	c0 := mangled[0]
+		
+	return (c0 == 'Z')
+}
+
+/*
 <name> ::= <nested-name>
 	   ::= <unscoped-name>
 	   ::= <unscoped-template-name> <template-args>
@@ -199,9 +237,41 @@ func (p *Demangler) parseSpecialName() {
 func (p *Demangler) parseName() {
 	if isNestedName(p.Remain) {
 		p.parseNestedName()
+	} else if isSubstitution(p.Remain) {
+		p.parseSubstitution()
+	} else if isLocalName(p.Remain) {
+		p.parseLocalName()
 	} else {
-		
+		p.parseUnscopedName()
 	}
+}
+
+/*
+<unscoped-name> ::= <unqualified-name>
+		    ::= St <unqualified-name>   # ::std::
+*/
+func (p *Demangler) parseUnscopedName() {
+	mangledname := p.Remain
+	if len(mangledname) < 2 {
+		return
+	}
+	
+	op := mangledname[0:2]
+	
+	if op == "St" {
+		p.isStd = true
+		p.Remain = p.Remain[2:]
+	}
+	
+	p.parseUnqualifiedName()
+}
+
+func (p *Demangler) parseSubstitution() {
+	panic("Not Implemented")
+}
+
+func (p *Demangler) parseLocalName() {
+	panic("Not Implemented")
 }
 
 func (p *Demangler) parseNestedName() {
@@ -471,30 +541,50 @@ func (p *Demangler) parseUnnamedTypeName() bool {
 	return true
 }
 
+func parseNumber(mangled string) (num int, remain string) {
+	if len(mangled) == 0 {
+		return -1, mangled
+	}
+	
+	c0 := mangled[0]
+	if len(mangled) == 1 {
+		if isNumberChar(c0) {
+			return int(c0 - '0'), ""
+		} else {
+			return -1, mangled
+		}		
+	}
+	
+	c1 := mangled[1]
+	if isNumberChar(c0) && isNumberChar(c1) {
+		charLen := (int(c0 - '0') * 10) + int(c1 - '0')
+		part := mangled[2:]
+		
+		return charLen, part
+	} else if isNumberChar(c0) {
+		charLen := int(c0 - '0')
+		part := mangled[1:]
+		
+		return charLen, part
+	} else {
+		// some error
+		fmt.Printf("WARN: Invalid number: %v\n", mangled)
+		return -1, mangled
+	}
+}
+
 // <source-name> ::= <positive length number> <identifier>
 func parseSourceName(mangled string) (identifier, remain string) {
 	if len(mangled) < 2 {
 		return "", mangled
 	}
 	
-	c0 := mangled[0]
-	c1 := mangled[1]
-	charLen := 0
-	if isNumberChar(c0) && isNumberChar(c1) {
-		charLen = (int(c0 - '0') * 10) + int(c1 - '0')
-		part := mangled[2:]
-		
-		return parseIdentifier(part, charLen)
-	} else if isNumberChar(c0) {
-		charLen = int(c0 - '0')
-		part := mangled[1:]
-		
-		return parseIdentifier(part, charLen)
-	} else {
-		// some error
-		fmt.Printf("WARN: Invalid source name: %v\n", mangled)
+	size, part := parseNumber(mangled)
+	if size < 0 {
 		return "", mangled
 	}
+	
+	return parseIdentifier(part, size)
 }
 
 func parseIdentifier(mangled string, size int) (keyword, remain string) {
@@ -507,11 +597,86 @@ func (p *Demangler) parseTemplatePrefix() {
 	
 }
 
+func (p *ParamType) parseType(mangled string) (result bool, remains string) {
+	qualifiers, remain := parseCvQualifiers(mangled)
+	
+	if len(qualifiers) > 0 {
+		p.CvQualifiers = append(p.CvQualifiers, qualifiers...)
+	}
+	
+	c0 := remain[0]
+	if c0 == 'P' {
+		p.isPointer = true
+		remain = remain[1:]
+	} else if c0 == 'R' {
+		p.isRef = true
+		remain = remain[1:]
+	} else if c0 == 'O' {
+		p.isRValue = true
+		remain = remain[1:]
+	} else if c0 == 'C' {
+		p.isComplex = true
+		remain = remain[1:]
+	} else if c0 == 'G' {
+		p.isImaginary = true
+		remain = remain[1:]
+	} else if c0 == 'U' {
+		panic("Not implemented")
+	}
+	
+	c1 := remain[0]
+	if c1 == 'A' {
+		// array type
+		p.isArray = true
+		
+		remain = p.parseArrayType(remain)
+	} else if c1 == 'M' {
+		panic("Not Implemented")
+	} else if c1 == 'T' {
+		// Template parameters
+		panic("Not Implemented")
+	}
+	
+	return true, remain
+}
+
+/*
+<array-type> ::= A <positive dimension number> _ <element type>
+	         ::= A [<dimension expression>] _ <element type>
+*/
+func (p *ParamType) parseArrayType(mangledname string) string {
+	if len(mangledname) < 4 {
+		return ""
+	}
+	
+	if mangledname[0] != 'A' {
+		fmt.Printf("WARN: Invalid array type: [%v]\n", mangledname)
+		return ""
+	}
+	
+	remain := mangledname[1:]
+	size, part := parseNumber(remain)
+	if size < 0 {
+		return remain
+	}
+	
+	if part[0] != '_' {
+		fmt.Printf("WARN: Invalid array size type: [%v]\n", mangledname)
+		return remain
+	}
+	
+	_, remain = p.parseType(part[1:]) // element type
+	return remain
+}
+
 func (p *Demangler) parseType() ParamType {
 	var tp ParamType
 	qualifiers := []string{}
 	qualifiers, p.Remain = parseCvQualifiers(p.Remain)
-	tp.CvQualifiers = append(tp.CvQualifiers, qualifiers...)
+	
+	if len(qualifiers) > 0 {
+		tp.CvQualifiers = append(tp.CvQualifiers, qualifiers...)
+	}	
 	
 	c0 := p.Remain[0]
 	if c0 == 'P' {
