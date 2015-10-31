@@ -87,6 +87,10 @@ func isNumberChar(c byte) bool {
 	return (c >= '0') && (c <= '9')
 }
 
+func (p *Demangler) generate() string {
+	return ""
+}
+
 func (p *Demangler) unmangle(mangled string) {
 	p.Mangled = mangled
 	p.Remain = mangled
@@ -123,8 +127,15 @@ func (p *Demangler) parseBareFunctionTypes() {
 }
 
 func (p *Demangler) parseBareFunctionType() {
-	pt := p.parseType()
-	p.AllParams = append(p.AllParams, pt)
+	var para ParamType
+	res, remain := para.parseType(p.Remain)
+	
+	if !res {
+		return
+	}
+	
+	p.AllParams = append(p.AllParams, para)
+	p.Remain = remain
 }
 
 // Virtual Tables and RTTI
@@ -142,19 +153,26 @@ func (p *Demangler) parseVirtualTableAndRTTI() {
 	// Virtual Tables and RTTI
 	if nm == "TV" {
 		p.Remain = p.Remain[2:]
-		p.parseType()
 	} else if nm == "TT" {
 		p.Remain = p.Remain[2:]
-		p.parseType()
 	} else if nm == "TI" {
 		p.Remain = p.Remain[2:]
-		p.parseType()
 	} else if nm == "TS" {
 		p.Remain = p.Remain[2:]
-		p.parseType()
 	} else {
 		fmt.Printf("WARN: Not valid VirtualTableAndRTTI: %v\n", p.Remain)
+		return
 	}
+	
+	var para ParamType
+	res, remain := para.parseType(p.Remain)
+	
+	if !res {
+		return
+	}
+	
+	p.AllParams = append(p.AllParams, para)
+	p.Remain = remain
 }
 
 // Virtual Tables and RTTI
@@ -285,6 +303,8 @@ func (p *Demangler) parseNestedName() {
 	p.parseRefQualifier()
 	
 	p.parsePrefix()
+	
+	p.parseUnqualifiedName()
 }
 
 func (p *Demangler) parseCvQualifiers() {
@@ -667,51 +687,6 @@ func (p *ParamType) parseArrayType(mangledname string) string {
 	
 	_, remain = p.parseType(part[1:]) // element type
 	return remain
-}
-
-func (p *Demangler) parseType() ParamType {
-	var tp ParamType
-	qualifiers := []string{}
-	qualifiers, p.Remain = parseCvQualifiers(p.Remain)
-	
-	if len(qualifiers) > 0 {
-		tp.CvQualifiers = append(tp.CvQualifiers, qualifiers...)
-	}	
-	
-	c0 := p.Remain[0]
-	if c0 == 'P' {
-		tp.isPointer = true
-		p.Remain =  p.Remain[1:]
-	} else if c0 == 'R' {
-		tp.isRef = true
-		p.Remain =  p.Remain[1:]
-	} else if c0 == 'O' {
-		tp.isRValue = true
-		p.Remain =  p.Remain[1:]
-	} else if c0 == 'C' {
-		tp.isComplex = true
-		p.Remain =  p.Remain[1:]
-	} else if c0 == 'G' {
-		tp.isImaginary = true
-		p.Remain =  p.Remain[1:]
-	} else if c0 == 'U' {
-		panic("Not implemented")
-	}
-	
-	c1 := p.Remain[0]
-	if c1 == 'A' {
-		// array type
-		tp.isArray = true
-		p.Remain =  p.Remain[1:]
-	} else if c1 == 'M' {
-		panic("Not Implemented")
-	} else if c1 == 'T' {
-		// Template parameters
-		panic("Not Implemented")
-	}
-	
-	// TODO
-	return tp
 }
 
 func isBuildinType(mangled string) bool {
