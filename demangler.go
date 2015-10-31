@@ -9,7 +9,7 @@ import (
 func demangle(mangledname string) string {
 	var d Demangler
 	d.unmangle(mangledname)
-	return ""
+	return d.generate()
 }
 
 type ParamType struct {
@@ -29,8 +29,9 @@ type ParamType struct {
 type Demangler struct {
 	Mangled      string
 	Remain       string
-	CVqualifiers []byte
-	RefQualifer  byte
+	CVqualifiers []string // restrict (C99), volatile, const
+	RefQualifer  byte // R: &, O: &&
+	NestedNames  []string 
 	FuncName     string
 	isCtor       bool
 	isDtor       bool
@@ -46,6 +47,7 @@ func isNestedName(mangled string) bool {
 	return mangled[0] == 'N'
 }
 
+// <CV-qualifiers> ::= [r] [V] [K] 	# restrict (C99), volatile, const
 func isCVqualifier(mangled string) bool {
 	if len(mangled) < 1 {
 		return false
@@ -56,6 +58,10 @@ func isCVqualifier(mangled string) bool {
 		(mangled[0] == 'K')
 }
 
+/*
+<ref-qualifier> ::= R                   # & ref-qualifier
+<ref-qualifier> ::= O                   # && ref-qualifier
+*/
 func isRefqualifier(mangled string) bool {
 	if len(mangled) < 1 {
 		return false
@@ -87,13 +93,59 @@ func isNumberChar(c byte) bool {
 	return (c >= '0') && (c <= '9')
 }
 
+func (p *Demangler) fillFuncName() {
+	if p.FuncName == "" {
+		size := len(p.NestedNames)
+		if size > 0 {
+			p.FuncName = p.NestedNames[size - 1] // the last
+			p.NestedNames = p.NestedNames[:size - 1] // remove the last
+		}
+	}
+}
+
 func (p *Demangler) generate() string {
-	return ""
+	s := ""
+		
+	p.fillFuncName()
+	
+	for _, item := range p.NestedNames {
+		s += item + "::"
+	}
+	
+	if p.isCtor {
+		s += p.FuncName + "::" + p.FuncName + "()"
+		return s
+	}
+	
+	if p.isDtor {
+		s += p.FuncName + "::~" + p.FuncName + "()"
+		return s
+	}
+	
+	s += p.FuncName + "("
+	
+	// params
+	for _, item := range p.AllParams {
+		s += item.toString() + ","
+	}
+	
+	s = strings.TrimRight(s, ",") // trim the last comma
+	
+	s += ")"
+	
+	for _, item := range p.CVqualifiers {
+		s += item
+	}
+	
+	return s
 }
 
 func (p *Demangler) unmangle(mangled string) {
 	p.Mangled = mangled
 	p.Remain = mangled
+	p.CVqualifiers = []string{}
+	p.NestedNames = []string{}
+	p.AllParams = []ParamType{}
 	
 	if strings.HasPrefix(p.Remain, "_Z") {
 		p.Remain = p.Remain[2:]
@@ -281,9 +333,13 @@ func (p *Demangler) parseUnscopedName() {
 		p.Remain = p.Remain[2:]
 	}
 	
-	p.parseUnqualifiedName()
+	p.FuncName = p.parseUnqualifiedName()
 }
 
+/*
+<substitution> ::= S <seq-id> _
+		 ::= S_
+*/
 func (p *Demangler) parseSubstitution() {
 	panic("Not Implemented")
 }
@@ -292,6 +348,10 @@ func (p *Demangler) parseLocalName() {
 	panic("Not Implemented")
 }
 
+/*
+<nested-name> ::= N [<CV-qualifiers>] [<ref-qualifier>] <prefix> <unqualified-name> E
+		      ::= N [<CV-qualifiers>] [<ref-qualifier>] <template-prefix> <template-args> E
+*/
 func (p *Demangler) parseNestedName() {
 	if !isNestedName(p.Remain) {
 		fmt.Printf("WARN:Mangled remain not a nested name: %v\n", p.Remain)
@@ -304,13 +364,16 @@ func (p *Demangler) parseNestedName() {
 	
 	p.parsePrefix()
 	
-	p.parseUnqualifiedName()
+	p.FuncName = p.parseUnqualifiedName()
 }
 
+// <CV-qualifiers> ::= [r] [V] [K] 	# restrict (C99), volatile, const
 func (p *Demangler) parseCvQualifiers() {
-	for isCVqualifier(p.Remain) {
-		p.CVqualifiers = append(p.CVqualifiers, p.Remain[0])
-		p.Remain = p.Remain[1:]
+	qualifiers, remain := parseCvQualifiers(p.Remain)
+	p.Remain = remain
+	
+	if len(qualifiers) > 0 {
+		p.CVqualifiers = append(p.CVqualifiers, qualifiers...)
 	}
 }
 
@@ -342,9 +405,60 @@ func (p *Demangler) parseRefQualifier() {
 	}
 }
 
-// TODO
+/*
+<prefix> ::= <unqualified-name>                 # global class or namespace
+         ::= <prefix> <unqualified-name>        # nested class or namespace
+	     ::= <template-prefix> <template-args>  # class template specialization
+         ::= <template-param>                   # template type parameter
+         ::= <decltype>                         # decltype qualifier
+         ::= <prefix> <data-member-prefix>      # initializer of a data member
+	     ::= <substitution>
+*/
 func (p *Demangler) parsePrefix() {
+	if len(p.Remain) < 2 {
+		return 
+	}
 	
+	c0 := p.Remain[0]
+	if c0 == 'S' {
+		p.parseSubstitution()
+		return
+	} else if c0 == 'T' {
+		p.parseTemplateParam()
+		return
+	}
+	
+	twochar := p.Remain[:2]
+	if (twochar == "Dt") || (twochar == "DT") {
+		p.parseDeclType()
+		return
+	}
+	
+	s := p.parseUnqualifiedName()
+	if s == "" {
+		p.parsePrefix()
+		s = p.parseUnqualifiedName()
+		p.NestedNames = append(p.NestedNames, s)
+	} else {
+		p.NestedNames = append(p.NestedNames, s)
+	}
+}
+
+/*
+<decltype>  ::= Dt <expression> E  # decltype of an id-expression 
+                                      or class member access (C++0x)
+            ::= DT <expression> E  # decltype of an expression (C++0x)
+*/
+func (p *Demangler) parseDeclType() {
+	panic("Not Implemented")
+}
+
+/*
+<template-param> ::= T_	# first template parameter
+		         ::= T <parameter-2 non-negative number> _
+*/
+func (p *Demangler) parseTemplateParam() {
+	panic("Not Implemented")
 }
 
 /*
@@ -368,24 +482,15 @@ func (p *Demangler) parseUnqualifiedName() string {
 		return nm
 	}
 	
-	res = p.parseUnnamedTypeName()
+	res, nm = parseUnnamedTypeName(p.Remain)
 	if res {
-		p.Remain = p.Remain[2:]
+		p.Remain = nm
 		return nm		
 	}
 	
 	var keyword string
 	keyword, p.Remain = parseSourceName(p.Remain)
-	if keyword != "" {
-		return keyword
-	}
-	
-	res, p.Remain = parseUnnamedTypeName(p.Remain)
-	if res {
-		
-	}
-	
-	return ""
+	return keyword
 }
 
 func parseOperatorName(mangledname string) (bool, string) {
@@ -544,23 +649,6 @@ func parseUnnamedTypeName(mangled string) (isSuccess bool, remain string) {
 	}
 }
 
-func (p *Demangler) parseUnnamedTypeName() bool {
-	if len(p.Remain) < 2 {
-		return false
-	}
-	
-	nm := p.Remain[0:2]
-	if nm == "Ut" {
-		// TODO
-		fmt.Printf("WARN: parseUnnamedTypeName not implemented! Value: %v\n", p.Remain)
-	} else {
-		return false
-	}
-	
-	p.Remain = p.Remain[2:]
-	return true
-}
-
 func parseNumber(mangled string) (num int, remain string) {
 	if len(mangled) == 0 {
 		return -1, mangled
@@ -617,6 +705,25 @@ func (p *Demangler) parseTemplatePrefix() {
 	
 }
 
+/*
+<type> ::= <builtin-type>
+	 ::= <function-type>
+	 ::= <class-enum-type>
+	 ::= <array-type>
+	 ::= <pointer-to-member-type>
+	 ::= <template-param>
+	 ::= <template-template-param> <template-args>
+	 ::= <decltype>
+	 ::= <substitution> # See Compression below
+	
+<type> ::= <CV-qualifiers> <type>
+	 ::= P <type>	# pointer-to
+	 ::= R <type>	# reference-to
+	 ::= O <type>	# rvalue reference-to (C++0x)
+	 ::= C <type>	# complex pair (C 2000)
+	 ::= G <type>	# imaginary (C 2000)
+	 ::= U <source-name> [<template-args>] <type>	# vendor extended type qualifier
+*/
 func (p *ParamType) parseType(mangled string) (result bool, remains string) {
 	qualifiers, remain := parseCvQualifiers(mangled)
 	
@@ -657,7 +764,19 @@ func (p *ParamType) parseType(mangled string) (result bool, remains string) {
 		panic("Not Implemented")
 	}
 	
-	return true, remain
+	// TODO other type
+	
+	if len(remain) > 1 {
+		s := parseBuildinType(c1, remain[1])
+		p.TypeName = s
+		return (s != ""), remain[1:]
+	} else {
+		s := parseBuildinType(c1, 0)
+		p.TypeName = s
+		return (s != ""), remain[1:]
+	}
+	
+	return false, remain
 }
 
 /*
@@ -687,6 +806,25 @@ func (p *ParamType) parseArrayType(mangledname string) string {
 	
 	_, remain = p.parseType(part[1:]) // element type
 	return remain
+}
+
+func (p *ParamType) toString() string {
+	s := ""
+	for _, item := range p.CvQualifiers {
+		s += item + " "
+	}
+	
+	s += p.TypeName
+	
+	if p.isPointer {
+		s += "*"
+	} else if p.isRef {
+		s += "&"
+	} else if p.isRValue {
+		s += "&&"
+	}
+	
+	return s
 }
 
 func isBuildinType(mangled string) bool {
