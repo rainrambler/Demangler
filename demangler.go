@@ -5,11 +5,29 @@ import (
 	"strings"
 )
 
+const
+(
+	CTOR_FUNC   = 1
+	DTOR_FUNC   = 2
+	NORMAL_FUNC = 3
+)
+
 // http://mentorembedded.github.io/cxx-abi/abi.html#mangling
 func demangle(mangledname string) string {
 	var d Demangler
 	d.unmangle(mangledname)
 	return d.generate()
+}
+
+type EntityName struct {
+	Mangled      string
+	Remain       string
+	isStd        bool // from St <unqualified-name>   # ::std::
+	Result       string
+	CVqualifiers []string // restrict (C99), volatile, const
+	RefQualifer  byte // R: &, O: &&
+	NestedNames  []string 
+	FunctionType int
 }
 
 type ParamType struct {
@@ -167,7 +185,12 @@ func (p *Demangler) parseEncoding() {
 	if isSpecialName(p.Remain) {
 		p.parseSpecialName()
 	} else {
-		p.parseName()
+		var en EntityName
+		en.Mangled = p.Remain
+		en.Remain = p.Remain
+		en.parseName()
+		
+		p.Remain = en.Remain
 		p.parseBareFunctionTypes()
 	}
 }
@@ -258,6 +281,10 @@ func (p *Demangler) parseVirtualOverrideTrunks() {
 	}
 }
 
+/*
+<special-name> ::= T <call-offset> <base encoding>
+		      # base is the nominal target function of thunk
+*/
 func (p *Demangler) parseSpecialName() {
 	if isVirtualTableAndRTTI(p.Remain) {
 		p.parseVirtualTableAndRTTI()
@@ -304,7 +331,7 @@ func isLocalName(mangled string) bool {
     <unscoped-template-name> ::= <unscoped-name>
 			     ::= <substitution>
 */
-func (p *Demangler) parseName() {
+func (p *EntityName) parseName() {
 	if isNestedName(p.Remain) {
 		p.parseNestedName()
 	} else if isSubstitution(p.Remain) {
@@ -320,7 +347,7 @@ func (p *Demangler) parseName() {
 <unscoped-name> ::= <unqualified-name>
 		    ::= St <unqualified-name>   # ::std::
 */
-func (p *Demangler) parseUnscopedName() {
+func (p *EntityName) parseUnscopedName() {
 	mangledname := p.Remain
 	if len(mangledname) < 2 {
 		return
@@ -333,18 +360,30 @@ func (p *Demangler) parseUnscopedName() {
 		p.Remain = p.Remain[2:]
 	}
 	
-	p.FuncName = p.parseUnqualifiedName()
+	p.Result = p.parseUnqualifiedName()
 }
 
 /*
 <substitution> ::= S <seq-id> _
 		 ::= S_
 */
-func (p *Demangler) parseSubstitution() {
+func (p *EntityName) parseSubstitution() {
 	panic("Not Implemented")
 }
 
-func (p *Demangler) parseLocalName() {
+func (p *EntityName) parseLocalName() {
+	panic("Not Implemented")
+}
+
+/*
+<substitution> ::= S <seq-id> _
+		 ::= S_
+*/
+func parseSubstitution() {
+	panic("Not Implemented")
+}
+
+func parseLocalName() {
 	panic("Not Implemented")
 }
 
@@ -352,7 +391,7 @@ func (p *Demangler) parseLocalName() {
 <nested-name> ::= N [<CV-qualifiers>] [<ref-qualifier>] <prefix> <unqualified-name> E
 		      ::= N [<CV-qualifiers>] [<ref-qualifier>] <template-prefix> <template-args> E
 */
-func (p *Demangler) parseNestedName() {
+func (p *EntityName) parseNestedName() {
 	if !isNestedName(p.Remain) {
 		fmt.Printf("WARN:Mangled remain not a nested name: %v\n", p.Remain)
 		return
@@ -364,11 +403,11 @@ func (p *Demangler) parseNestedName() {
 	
 	p.parsePrefix()
 	
-	p.FuncName = p.parseUnqualifiedName()
+	p.Result = p.parseUnqualifiedName()
 }
 
 // <CV-qualifiers> ::= [r] [V] [K] 	# restrict (C99), volatile, const
-func (p *Demangler) parseCvQualifiers() {
+func (p *EntityName) parseCvQualifiers() {
 	qualifiers, remain := parseCvQualifiers(p.Remain)
 	p.Remain = remain
 	
@@ -398,7 +437,18 @@ func parseCvQualifiers(mangled string) (cvs []string, remain string) {
 	return qualifiers, part
 }
 
-func (p *Demangler) parseRefQualifier() {
+func parseRefQualifier(mangled string) (refq byte, remain string) {
+	if isRefqualifier(mangled) {
+		r := mangled[0]
+		rem := mangled[1:]
+		
+		return r, rem
+	} else {
+		return 0, mangled
+	}
+}
+
+func (p *EntityName) parseRefQualifier() {
 	if isRefqualifier(p.Remain) {
 		p.RefQualifer = p.Remain[0]
 		p.Remain = p.Remain[1:]
@@ -414,14 +464,14 @@ func (p *Demangler) parseRefQualifier() {
          ::= <prefix> <data-member-prefix>      # initializer of a data member
 	     ::= <substitution>
 */
-func (p *Demangler) parsePrefix() {
+func (p *EntityName) parsePrefix() {
 	if len(p.Remain) < 2 {
 		return 
 	}
 	
 	c0 := p.Remain[0]
 	if c0 == 'S' {
-		p.parseSubstitution()
+		parseSubstitution()
 		return
 	} else if c0 == 'T' {
 		p.parseTemplateParam()
@@ -430,7 +480,7 @@ func (p *Demangler) parsePrefix() {
 	
 	twochar := p.Remain[:2]
 	if (twochar == "Dt") || (twochar == "DT") {
-		p.parseDeclType()
+		parseDeclType()
 		return
 	}
 	
@@ -454,10 +504,19 @@ func (p *Demangler) parseDeclType() {
 }
 
 /*
+<decltype>  ::= Dt <expression> E  # decltype of an id-expression 
+                                      or class member access (C++0x)
+            ::= DT <expression> E  # decltype of an expression (C++0x)
+*/
+func parseDeclType() {
+	panic("Not Implemented")
+}
+
+/*
 <template-param> ::= T_	# first template parameter
 		         ::= T <parameter-2 non-negative number> _
 */
-func (p *Demangler) parseTemplateParam() {
+func (p *EntityName) parseTemplateParam() {
 	panic("Not Implemented")
 }
 
@@ -467,13 +526,13 @@ func (p *Demangler) parseTemplateParam() {
                    ::= <source-name>   
                    ::= <unnamed-type-name>   
 */
-func (p *Demangler) parseUnqualifiedName() string {
+func (p *EntityName) parseUnqualifiedName() string {
 	var res bool
 	var nm string
-	res = p.parseCtorDtorName()
-	if res {
-		//  ?
-		return ""
+	p.FunctionType, p.Remain = parseCtorDtorName(p.Remain)
+	if p.FunctionType != NORMAL_FUNC {
+		// Ctor or Dtor confirmed
+		return p.Remain
 	}
 	
 	res, nm = parseOperatorName(p.Remain)	
@@ -608,30 +667,27 @@ func parseOperatorName(mangledname string) (bool, string) {
 	return true, nm
 }
 
-func (p *Demangler) parseCtorDtorName() bool {
-	if len(p.Remain) < 2 {
-		return false
+func parseCtorDtorName(mangled string) (funcType int, remain string) {
+	if len(mangled) < 2 {
+		return NORMAL_FUNC, mangled
 	}
 	
-	nm := p.Remain[0:2]
+	nm := mangled[0:2]
 	if nm == "C1" {
-		p.isCtor = true
+		return CTOR_FUNC, mangled[2:]
 	} else if nm == "C2" {
-		p.isCtor = true
+		return CTOR_FUNC, mangled[2:]
 	} else if nm == "C3" {
-		p.isCtor = true
+		return CTOR_FUNC, mangled[2:]
 	} else if nm == "D0" {
-		p.isDtor = true
+		return DTOR_FUNC, mangled[2:]
 	} else if nm == "D1" {
-		p.isDtor = true
+		return DTOR_FUNC, mangled[2:]
 	} else if nm == "D2" {
-		p.isDtor = true
+		return DTOR_FUNC, mangled[2:]
 	} else {
-		return false
+		return NORMAL_FUNC, mangled
 	}
-	
-	p.Remain = p.Remain[2:]
-	return true
 }
 
 func parseUnnamedTypeName(mangled string) (isSuccess bool, remain string) {
@@ -701,7 +757,7 @@ func parseIdentifier(mangled string, size int) (keyword, remain string) {
 	return s, r
 }
 
-func (p *Demangler) parseTemplatePrefix() {
+func (p *EntityName) parseTemplatePrefix() {
 	
 }
 
@@ -777,6 +833,21 @@ func (p *ParamType) parseType(mangled string) (result bool, remains string) {
 	}
 	
 	return false, remain
+}
+
+/*
+<class-enum-type> ::= <name>     # non-dependent type name, dependent type name, or dependent typename-specifier
+                  ::= Ts <name>  # dependent elaborated type specifier using 'struct' or 'class'
+                  ::= Tu <name>  # dependent elaborated type specifier using 'union'
+                  ::= Te <name>  # dependent elaborated type specifier using 'enum'
+*/
+func (p *ParamType) parseClassEnumType(mangledname string) string {
+	if len(mangledname) < 2 {
+		return ""
+	}
+	
+	// TODO
+	return ""
 }
 
 /*
