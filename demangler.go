@@ -282,6 +282,16 @@ func isVirtualOverrideTrunks(mangledname string) bool {
 	return (nm == "Th") || (nm == "Tv") || (nm == "Tc")
 }
 
+/*
+<special-name> ::= T <call-offset> <base encoding>
+		      # base is the nominal target function of thunk
+  <call-offset> ::= h <nv-offset> _
+		::= v <v-offset> _
+  <nv-offset> ::= <offset number>
+		      # non-virtual base override
+  <v-offset>  ::= <offset number> _ <virtual offset number>
+		      # virtual base override, with vcall offset
+*/
 func (p *Demangler) parseVirtualOverrideTrunks() {
 	// Virtual Tables and RTTI
 	nm := p.Remain[0:2]
@@ -393,10 +403,12 @@ func (p *EntityName) parseUnscopedName() {
 		 ::= S_
 */
 func (p *EntityName) parseSubstitution() {
+	// TODO
 	panic("Not Implemented")
 }
 
 func (p *EntityName) parseLocalName() {
+	// TODO
 	panic("Not Implemented")
 }
 
@@ -709,6 +721,9 @@ func parseCtorDtorName(mangled string) (funcType int, remain string) {
 	}
 }
 
+/*
+<unnamed-type-name> ::= Ut [ <nonnegative number> ] _ 
+*/
 func parseUnnamedTypeName(mangled string) (isSuccess bool, remain string) {
 	if len(mangled) < 2 {
 		return false, mangled
@@ -840,7 +855,6 @@ func (p *ParamType) parseType(mangled string) (result bool, remains string) {
 		panic("Not Implemented")
 	}
 	
-	// TODO other type
 	if isBuildinType(remain) {
 		if len(remain) > 1 {
 			s := parseBuildinType(c1, remain[1])
@@ -886,10 +900,7 @@ func (p *ParamType) parseClassEnumType(mangledname string) (result bool, remains
 	var en EntityName
 	en.Remain = mangled
 	en.parseName()
-	
-	fmt.Printf("DBG: Result: %v, Remain: %v\n", en.Result, en.Remain)
-	
-	// TODO
+
 	p.TypeName = en.Result
 	return true, en.Remain
 }

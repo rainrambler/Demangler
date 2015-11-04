@@ -40,6 +40,7 @@ func TestDemangle3(t *testing.T) {
 	}
 }
 
+// TODO substitution
 func testDemangle4(t *testing.T) {
 	s := "_Zrm1XS_"
 	res := "operator%(X, X)"
@@ -60,6 +61,18 @@ func TestDemangle5(t *testing.T) {
 	
 	if res != unmangled {
 		t.Errorf("TestDemangle5 result = [%v], want [%v]",
+			unmangled, res)
+	}
+}
+
+func TestDemangle6(t *testing.T) {
+	s := "_ZNSt8ios_base4InitC1Ev"
+	res := "std::ios_base::Init::Init()"
+	
+	unmangled := demangle(s)
+	
+	if res != unmangled {
+		t.Errorf("TestDemangle6 result = [%v], want [%v]",
 			unmangled, res)
 	}
 }
