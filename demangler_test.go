@@ -65,7 +65,7 @@ func TestDemangle5(t *testing.T) {
 	}
 }
 
-func TestDemangle6(t *testing.T) {
+func testDemangle6(t *testing.T) {
 	s := "_ZNSt8ios_base4InitC1Ev"
 	res := "std::ios_base::Init::Init()"
 	

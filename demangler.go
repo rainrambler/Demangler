@@ -372,7 +372,7 @@ func (p *EntityName) parseName() {
 	} else if isLocalName(p.Remain) {
 		p.parseLocalName()
 	} else {
-		p.parseUnscopedName()
+		p.Result = p.parseUnscopedName()
 	}
 }
 
@@ -380,12 +380,13 @@ func (p *EntityName) parseName() {
 <unscoped-name> ::= <unqualified-name>
 		    ::= St <unqualified-name>   # ::std::
 */
-func (p *EntityName) parseUnscopedName() {
+// return value: parsed name
+func (p *EntityName) parseUnscopedName() string {
 	fmt.Printf("DBG: EntityName.parseUnscopedName Remain: %v\n", p.Remain)
 	mangledname := p.Remain
 	if len(mangledname) < 2 {
 		fmt.Printf("WARN: EntityName.parseUnscopedName Unknown name: %v\n", mangledname)
-		return
+		return mangledname
 	}
 	
 	op := mangledname[0:2]
@@ -395,7 +396,7 @@ func (p *EntityName) parseUnscopedName() {
 		p.Remain = p.Remain[2:]
 	}
 	
-	p.Result = p.parseUnqualifiedName()
+	return p.parseUnqualifiedName()
 }
 
 /*
@@ -433,6 +434,7 @@ func (p *EntityName) parseNestedName() {
 	
 	for (p.Remain[0] != 'E') && (len(p.Remain) > 0) {
 		partName := p.parseUnqualifiedName()
+		//partName := p.parseUnscopedName()
 		p.NestedNames = append(p.NestedNames, partName)
 	}
 		
