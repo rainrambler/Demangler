@@ -40,7 +40,7 @@ func TestDemangle3(t *testing.T) {
 	}
 }
 
-func TestDemangle4(t *testing.T) {
+func testDemangle4(t *testing.T) {
 	s := "_Zrm1XS_"
 	res := "operator%(X, X)"
 	
@@ -48,6 +48,18 @@ func TestDemangle4(t *testing.T) {
 	
 	if res != unmangled {
 		t.Errorf("TestDemangle4 result = [%v], want [%v]",
+			unmangled, res)
+	}
+}
+
+func TestDemangle5(t *testing.T) {
+	s := "_ZN6System5Sound4beepEv"
+	res := "System::Sound::beep(void)"
+	
+	unmangled := demangle(s)
+	
+	if res != unmangled {
+		t.Errorf("TestDemangle5 result = [%v], want [%v]",
 			unmangled, res)
 	}
 }

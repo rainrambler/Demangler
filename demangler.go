@@ -180,6 +180,7 @@ func (p *Demangler) unmangle(mangled string) {
 	           ::= <special-name>
 */
 func (p *Demangler) parseEncoding() {
+	fmt.Printf("DBG: Demangler.parseEncoding mangledname: %v\n", p.Remain)
 	if isSpecialName(p.Remain) {
 		p.parseSpecialName()
 	} else {
@@ -404,10 +405,13 @@ func (p *EntityName) parseLocalName() {
 		      ::= N [<CV-qualifiers>] [<ref-qualifier>] <template-prefix> <template-args> E
 */
 func (p *EntityName) parseNestedName() {
+	fmt.Printf("DBG: EntityName.parseNestedName: %v\n", p.Remain)
 	if !isNestedName(p.Remain) {
 		fmt.Printf("WARN:Mangled remain not a nested name: %v\n", p.Remain)
 		return
 	}
+	
+	p.Remain = p.Remain[1:] // remove the first 'N' 
 	
 	p.parseCvQualifiers()
 	
@@ -415,7 +419,16 @@ func (p *EntityName) parseNestedName() {
 	
 	p.parsePrefix()
 	
-	p.Result = p.parseUnqualifiedName()
+	for (p.Remain[0] != 'E') && (len(p.Remain) > 0) {
+		partName := p.parseUnqualifiedName()
+		p.NestedNames = append(p.NestedNames, partName)
+	}
+		
+	if p.Remain[0] == 'E' {
+		p.Remain = p.Remain[1:]
+	} else {
+		fmt.Printf("WARN:EntityName.parseNestedName: invalid remain: %v\n", p.Remain)
+	}
 }
 
 // <CV-qualifiers> ::= [r] [V] [K] 	# restrict (C99), volatile, const
@@ -477,6 +490,7 @@ func (p *EntityName) parseRefQualifier() {
 	     ::= <substitution>
 */
 func (p *EntityName) parsePrefix() {
+	fmt.Printf("DBG: EntityName.parsePrefix: %v\n", p.Remain)
 	if len(p.Remain) < 2 {
 		return 
 	}
@@ -738,7 +752,7 @@ func parseNumber(mangled string) (num int, remain string) {
 	} else {
 		// some error
 		fmt.Printf("WARN: Invalid number: %v\n", mangled)
-		return -1, mangled
+		return -1, mangled[1:]
 	}
 }
 
@@ -786,6 +800,7 @@ func (p *EntityName) parseTemplatePrefix() {
 	 ::= U <source-name> [<template-args>] <type>	# vendor extended type qualifier
 */
 func (p *ParamType) parseType(mangled string) (result bool, remains string) {
+	fmt.Printf("DBG: ParamType.parseType mangled: %v\n", mangled)
 	qualifiers, remain := parseCvQualifiers(mangled)
 	
 	if len(qualifiers) > 0 {
@@ -849,7 +864,7 @@ func (p *ParamType) parseType(mangled string) (result bool, remains string) {
 */
 // Return value: remained string
 func (p *ParamType) parseClassEnumType(mangledname string) (result bool, remains string) {
-	//fmt.Printf("DBG: mangledname: %v\n", mangledname)
+	fmt.Printf("DBG: ParamType.parseClassEnumType mangledname: %v\n", mangledname)
 	if len(mangledname) < 2 {
 		return false, mangledname
 	}
@@ -884,6 +899,7 @@ func (p *ParamType) parseClassEnumType(mangledname string) (result bool, remains
 	         ::= A [<dimension expression>] _ <element type>
 */
 func (p *ParamType) parseArrayType(mangledname string) string {
+	fmt.Printf("DBG: ParamType.parseArrayType: %v\n", mangledname)
 	if len(mangledname) < 4 {
 		return ""
 	}

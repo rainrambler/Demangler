@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	demangle("_Z1fv")
+	demangle("_ZN6System5Sound4beepEv")
 }
