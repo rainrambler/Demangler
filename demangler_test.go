@@ -39,3 +39,15 @@ func TestDemangle3(t *testing.T) {
 			unmangled, res)
 	}
 }
+
+func TestDemangle4(t *testing.T) {
+	s := "_Zrm1XS_"
+	res := "operator%(X, X)"
+	
+	unmangled := demangle(s)
+	
+	if res != unmangled {
+		t.Errorf("TestDemangle4 result = [%v], want [%v]",
+			unmangled, res)
+	}
+}

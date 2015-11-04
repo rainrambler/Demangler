@@ -20,7 +20,6 @@ func demangle(mangledname string) string {
 }
 
 type EntityName struct {
-	Mangled      string
 	Remain       string
 	isStd        bool // from St <unqualified-name>   # ::std::
 	Result       string
@@ -53,7 +52,6 @@ type Demangler struct {
 	FuncName     string
 	isCtor       bool
 	isDtor       bool
-	isStd        bool // from St <unqualified-name>   # ::std::
 	AllParams    []ParamType
 }
 
@@ -186,13 +184,36 @@ func (p *Demangler) parseEncoding() {
 		p.parseSpecialName()
 	} else {
 		var en EntityName
-		en.Mangled = p.Remain
 		en.Remain = p.Remain
 		en.parseName()
 		
-		p.Remain = en.Remain
+		p.AppendResult(en)
 		p.parseBareFunctionTypes()
 	}
+}
+
+func (p *Demangler) AppendResult(en EntityName) {
+	if en.FunctionType == CTOR_FUNC {
+		p.isCtor = true
+	} else if en.FunctionType == DTOR_FUNC {
+		p.isDtor = true
+	}
+		
+	if en.isStd {
+			
+	}
+	
+	p.RefQualifer = en.RefQualifer
+	if len(en.CVqualifiers) > 0 {
+		p.CVqualifiers = append(p.CVqualifiers, en.CVqualifiers...)
+	}
+	
+	if len(en.NestedNames) > 0 {
+		p.NestedNames = append(p.NestedNames, en.NestedNames...)
+	}
+	
+	p.FuncName = en.Result
+	p.Remain = en.Remain
 }
 
 func (p *Demangler) parseBareFunctionTypes() {
@@ -332,6 +353,7 @@ func isLocalName(mangled string) bool {
 			     ::= <substitution>
 */
 func (p *EntityName) parseName() {
+	fmt.Printf("DBG: EntityName.parseName Remain: %v\n", p.Remain)
 	if isNestedName(p.Remain) {
 		p.parseNestedName()
 	} else if isSubstitution(p.Remain) {
@@ -348,8 +370,10 @@ func (p *EntityName) parseName() {
 		    ::= St <unqualified-name>   # ::std::
 */
 func (p *EntityName) parseUnscopedName() {
+	fmt.Printf("DBG: EntityName.parseUnscopedName Remain: %v\n", p.Remain)
 	mangledname := p.Remain
 	if len(mangledname) < 2 {
+		fmt.Printf("WARN: EntityName.parseUnscopedName Unknown name: %v\n", mangledname)
 		return
 	}
 	
@@ -372,18 +396,6 @@ func (p *EntityName) parseSubstitution() {
 }
 
 func (p *EntityName) parseLocalName() {
-	panic("Not Implemented")
-}
-
-/*
-<substitution> ::= S <seq-id> _
-		 ::= S_
-*/
-func parseSubstitution() {
-	panic("Not Implemented")
-}
-
-func parseLocalName() {
 	panic("Not Implemented")
 }
 
@@ -471,7 +483,7 @@ func (p *EntityName) parsePrefix() {
 	
 	c0 := p.Remain[0]
 	if c0 == 'S' {
-		parseSubstitution()
+		p.parseSubstitution()
 		return
 	} else if c0 == 'T' {
 		p.parseTemplateParam()
@@ -499,15 +511,6 @@ func (p *EntityName) parsePrefix() {
                                       or class member access (C++0x)
             ::= DT <expression> E  # decltype of an expression (C++0x)
 */
-func (p *Demangler) parseDeclType() {
-	panic("Not Implemented")
-}
-
-/*
-<decltype>  ::= Dt <expression> E  # decltype of an id-expression 
-                                      or class member access (C++0x)
-            ::= DT <expression> E  # decltype of an expression (C++0x)
-*/
 func parseDeclType() {
 	panic("Not Implemented")
 }
@@ -527,6 +530,8 @@ func (p *EntityName) parseTemplateParam() {
                    ::= <unnamed-type-name>   
 */
 func (p *EntityName) parseUnqualifiedName() string {
+	fmt.Printf("DBG: parseUnqualifiedName: %v\n", p.Remain)
+	
 	var res bool
 	var nm string
 	p.FunctionType, p.Remain = parseCtorDtorName(p.Remain)
@@ -821,18 +826,19 @@ func (p *ParamType) parseType(mangled string) (result bool, remains string) {
 	}
 	
 	// TODO other type
-	
-	if len(remain) > 1 {
-		s := parseBuildinType(c1, remain[1])
-		p.TypeName = s
-		return (s != ""), remain[1:]
+	if isBuildinType(remain) {
+		if len(remain) > 1 {
+			s := parseBuildinType(c1, remain[1])
+			p.TypeName = s
+			return (s != ""), remain[1:]
+		} else {
+			s := parseBuildinType(c1, 0)
+			p.TypeName = s
+			return (s != ""), remain[1:]
+		}
 	} else {
-		s := parseBuildinType(c1, 0)
-		p.TypeName = s
-		return (s != ""), remain[1:]
+		return p.parseClassEnumType(remain)
 	}
-	
-	return false, remain
 }
 
 /*
@@ -841,13 +847,36 @@ func (p *ParamType) parseType(mangled string) (result bool, remains string) {
                   ::= Tu <name>  # dependent elaborated type specifier using 'union'
                   ::= Te <name>  # dependent elaborated type specifier using 'enum'
 */
-func (p *ParamType) parseClassEnumType(mangledname string) string {
+// Return value: remained string
+func (p *ParamType) parseClassEnumType(mangledname string) (result bool, remains string) {
+	//fmt.Printf("DBG: mangledname: %v\n", mangledname)
 	if len(mangledname) < 2 {
-		return ""
+		return false, mangledname
 	}
 	
+	var mangled string
+	prefix := mangledname[:2]
+	if prefix == "Ts" {
+		// TODO
+		// parse each different class enum type
+		mangled = mangledname[2:]			
+	} else if prefix == "Tu" {
+		mangled = mangledname[2:]
+	} else if prefix == "Te" {
+		mangled = mangledname[2:]
+	} else {
+		mangled = mangledname
+	}
+	
+	var en EntityName
+	en.Remain = mangled
+	en.parseName()
+	
+	fmt.Printf("DBG: Result: %v, Remain: %v\n", en.Result, en.Remain)
+	
 	// TODO
-	return ""
+	p.TypeName = en.Result
+	return true, en.Remain
 }
 
 /*
