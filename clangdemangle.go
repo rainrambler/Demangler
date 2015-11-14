@@ -27,6 +27,11 @@ func (p *string_pair) full() string {
 	return (p.first) + (p.second)
 }
 
+// ???
+func (p *string_pair) move_full() string {
+	return (p.first) + (p.second)
+}
+
 // helper function
 func (p *string_pair) second_back() byte {
 	size := len(p.second)
@@ -86,6 +91,32 @@ func (p *Db) subs_pop_back() {
 		return
 	}
 	p.subs.content = p.subs.content[:size - 1]
+}
+
+func (p *Db) names_pop_back() {
+	size := len(p.names.content)
+	if size == 0 {
+		return
+	}
+	p.names.content = p.names.content[:size - 1]
+}
+
+// the last subs
+func (p *Db) subs_back() *sub_type {
+	size := len(p.subs.content)
+	if size == 0 {
+		return nil
+	}
+	return &p.subs.content[size - 1] // the last
+}
+
+// the last names
+func (p *Db) names_back() *string_pair {
+	size := len(p.names.content)
+	if size == 0 {
+		return nil
+	}
+	return &p.names.content[size - 1] // the last
 }
 
 func cxa_demangle(mangledname string, status *int) string {
@@ -162,6 +193,69 @@ func parse_special_name(mangled string, first, last int, db *Db, result *CStyleS
 	}
 }
 
+func parse_template_param(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_function_type(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_pointer_to_member_type(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_template_args(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_source_name(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_array_type(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_builtin_type(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
 // line 1891
 func parse_type(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
@@ -199,14 +293,224 @@ func parse_type(first, last *CStyleString, db *Db) CStyleString {
 						}
 						
 						if (cv & 1) != 0 {
-							
+							s := db.names.content[k].second
+							db.names.content[k].second = s[:p] + " const" + s[p:]
+							p += 6
+						}
+						
+						if (cv & 2) != 0 {
+							s := db.names.content[k].second
+							db.names.content[k].second = s[:p] + " volatile" + s[p:]
+							p += 9
+						}
+						
+						if (cv & 4) != 0 {
+							s := db.names.content[k].second
+							db.names.content[k].second = s[:p] + " restrict" + s[p:]
+						}						
+					} else {
+						if (cv & 1) != 0 {
+							db.names.content[k].first += " const"
+						}
+						
+						if (cv & 2) != 0 {
+							db.names.content[k].first += " volatile"
+						}
+						
+						if (cv & 4) != 0 {
+							db.names.content[k].first += " restrict"
 						}
 					}
+					
+					arr := db.subs_back().content
+					arr = append(arr, db.names.content[k])
 				}
+				
+				cs.Pos = t1.Pos
 			}
 		}
 		
 		return cs
+	} else {
+		t := parse_builtin_type(first, last, db)
+		if first.Pos != t.Pos {
+			cs.Pos = t.Pos
+		} else {
+			c := first.Content[0]
+			
+			if c == 'A' {
+				t = parse_array_type(first, last, db)
+				
+				if t.Pos != cs.Pos {
+					if db.names_size() == 0 {
+						return cs
+					}
+					
+					cs.Pos = t.Pos
+					// TODO
+					// ??? db.subs.push_back(typename C::sub_type(1, db.names.back(), db.names.get_allocator()));
+				}
+			} else if c == 'C' {
+				cs.Pos++
+				t = parse_type(&cs, last, db)
+				
+				if t.Pos != cs.Pos {
+					if db.names_size() == 0 {
+						return *first // or cs???						
+					}
+					
+					db.names_back().first += " complex"
+					cs.Pos = t.Pos
+					// TODO
+				}
+			} else if c == 'F' {
+				t = parse_function_type(&cs, last, db)
+				
+				if t.Pos != cs.Pos {
+					if db.names_size() == 0 {
+						return *first // or cs???						
+					}
+					
+					cs.Pos = t.Pos
+					// TODO
+				}
+			} else if c == 'G' {
+				cs.Pos++
+				t = parse_type(&cs, last, db)
+				
+				if t.Pos != cs.Pos {
+					if db.names_size() == 0 {
+						return *first // or cs???						
+					}
+					
+					db.names_back().first += " imaginary"
+					cs.Pos = t.Pos
+					// TODO
+				}
+			} else if c == 'M' {
+				t = parse_pointer_to_member_type(&cs, last, db)
+				
+				if t.Pos != cs.Pos {
+					if db.names_size() == 0 {
+						return *first // or cs???						
+					}
+					
+					cs.Pos = t.Pos
+					// TODO
+				}
+			} else if c == 'O' {
+				cs.Pos++
+				k0 := db.names_size()
+				t := parse_type(&cs, last, db)
+				k1 := db.names_size()
+				
+				if t.Pos != cs.Pos {
+					// ??? db.subs.emplace_back(db.names.get_allocator());
+					for k := k0; k < k1; k++ {
+						s := db.names.content[k].second
+						
+						if s[:2] == " [" {
+							db.names.content[k].first += " ("
+							db.names.content[k].second = ")" + s
+						} else if (len(s) > 0) && (s[0] == '(') {
+							db.names.content[k].first += "("
+							db.names.content[k].second = ")" + s
+						}
+						
+						db.names.content[k].first += "&&"
+						db.subs_back().content = append(db.subs_back().content, db.names.content[k])
+					}
+					
+					cs.Pos = t.Pos
+				}
+			} else if c == 'P' {
+				cs.Pos++
+				k0 := db.names_size()
+				t := parse_type(&cs, last, db)
+				k1 := db.names_size()
+				
+				if t.Pos != cs.Pos {
+					// ??? db.subs.emplace_back(db.names.get_allocator());
+					for k := k0; k < k1; k++ {
+						s := db.names.content[k].second
+						
+						if s[:2] == " [" {
+							db.names.content[k].first += " ("
+							db.names.content[k].second = ")" + s
+						} else if (len(s) > 0) && (s[0] == '(') {
+							db.names.content[k].first += "("
+							db.names.content[k].second = ")" + s
+						}
+						
+						if (first.Content[1] != 'U') || (db.names.content[k].first[:12] != "objc_object<") {
+							db.names.content[k].first += "*"
+						} else {
+							db.names.content[k].first = "id" + db.names.content[k].first[11:]
+						}
+						db.subs_back().content = append(db.subs_back().content, db.names.content[k])
+					}
+					
+					cs.Pos = t.Pos
+				}
+			} else if c == 'R' {
+				cs.Pos++
+				k0 := db.names_size()
+				t := parse_type(&cs, last, db)
+				k1 := db.names_size()
+				
+				if t.Pos != cs.Pos {
+					// ??? db.subs.emplace_back(db.names.get_allocator());
+					for k := k0; k < k1; k++ {
+						s := db.names.content[k].second
+						
+						if s[:2] == " [" {
+							db.names.content[k].first += " ("
+							db.names.content[k].second = ")" + s
+						} else if (len(s) > 0) && (s[0] == '(') {
+							db.names.content[k].first += "("
+							db.names.content[k].second = ")" + s
+						}
+						
+						db.names.content[k].first += "&"
+						db.subs_back().content = append(db.subs_back().content, db.names.content[k])
+					}
+					
+					cs.Pos = t.Pos
+				}
+			} else if c == 'T' {
+				k0 := db.names_size()
+				t := parse_template_param(&cs, last, db)
+				k1 := db.names_size()
+				
+				if t.Pos != first.Pos {
+					// ??? db.subs.emplace_back(db.names.get_allocator());
+					for k := k0; k < k1; k++ {
+						db.subs_back().content = append(db.subs_back().content, db.names.content[k])
+					}
+					
+					if db.try_to_parse_template_args && (k1 == (k0 + 1)) {
+						t1 := parse_template_args(&t, last, db)
+						
+						if t1.Pos != t.Pos {
+							args := db.names_back().move_full()
+							db.names_pop_back()
+							db.names_back().first += args
+							t.Pos = t1.Pos
+						}
+					}
+					
+					cs.Pos = t.Pos
+				}
+			} else if c == 'U' {
+				cs.Pos++
+				if cs.Pos != last.Pos {
+					t := parse_source_name(&cs, last, db)
+					if t.Pos != cs.Pos {
+						// TODO
+					}
+				}
+			}
+		}
 	}
 	
 	return cs
