@@ -231,12 +231,39 @@ func parse_function_type(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <decltype>  ::= Dt <expression> E  # decltype of an id-expression or class member access (C++0x)
+//             ::= DT <expression> E  # decltype of an expression (C++0x)
 func parse_decltype(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	delta := last.Pos - first.Pos
+	if delta < 4 {
+		return cs
+	}
+	
+	if first.currentChar() != 'D' {
+		return cs
+	}
+	
+	var noprefix CStyleString
+	noprefix.Content = first.Content
+	noprefix.Pos = first.Pos + 2
+	
+	c := first.nextChar()
+	if (c == 't') || (c == 'T') {
+		t := parse_expression(&noprefix, last, db)
+		if (t.Pos != noprefix.Pos) && (t.Pos != last.Pos) && (t.currentChar() == 'E') {
+			if db.names_empty() {
+				return *first
+			}
+			
+			db.names_back().first = "decltype(" + db.names_back().move_full() + ")"
+			cs.Pos = t.Pos + 1
+		}
+	}
+	
 	return cs
 }
 
@@ -379,13 +406,13 @@ func parse_array_type(first, last *CStyleString, db *Db) CStyleString {
 		}
 		
 		noprefix.Pos = t.Pos + 1
-		t2 := parse_type(noprefix, last, db)
+		t2 := parse_type(&noprefix, last, db)
 		if t2.Pos == noprefix.Pos {
 			return cs
 		}
 		
 		if db.names_size() < 2 {
-			return first
+			return *first
 		}
 		
 		ty := db.names_back()
@@ -475,13 +502,13 @@ func parse_builtin_type(first, last *CStyleString, db *Db) CStyleString {
 	} else if c == 'z' {
 		db.names_push_back("...")
 	} else if c == 'u' {
-		t := parse_source_name(cs, last, db)
+		t := parse_source_name(&cs, last, db)
 		if t.Pos != cs.Pos {
 			cs.Pos = t.Pos
 		}
 	} else if c == 'D' {
 		if (first.Pos + 1) == last.Pos {
-			return first
+			return *first
 		}
 		
 		nc := first.nextChar()
