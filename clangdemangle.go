@@ -425,7 +425,98 @@ func parse_builtin_type(first, last *CStyleString, db *Db) CStyleString {
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if first.Pos == last.Pos {
+		return cs
+	}
+	
+	cs.Pos++
+	
+	c := first.currentChar()
+	if c == 'v' {
+		db.names_push_back("void")
+	} else if c == 'w' {
+		db.names_push_back("wchar_t")
+	} else if c == 'b' {
+		db.names_push_back("bool")
+	} else if c == 'c' {
+		db.names_push_back("char")
+	} else if c == 'a' {
+		db.names_push_back("signed char")
+	} else if c == 'h' {
+		db.names_push_back("unsigned char")
+	} else if c == 's' {
+		db.names_push_back("short")
+	} else if c == 't' {
+		db.names_push_back("unsigned short")
+	} else if c == 'i' {
+		db.names_push_back("int")
+	} else if c == 'j' {
+		db.names_push_back("unsigned int")
+	} else if c == 'l' {
+		db.names_push_back("long")
+	} else if c == 'm' {
+		db.names_push_back("unsigned long")
+	} else if c == 'x' {
+		db.names_push_back("long long")
+	} else if c == 'y' {
+		db.names_push_back("unsigned long long")
+	} else if c == 'n' {
+		db.names_push_back("__int128")
+	} else if c == 'o' {
+		db.names_push_back("unsigned __int128")
+	} else if c == 'f' {
+		db.names_push_back("float")
+	} else if c == 'd' {
+		db.names_push_back("double")
+	} else if c == 'e' {
+		db.names_push_back("long double")
+	} else if c == 'g' {
+		db.names_push_back("__float128")
+	} else if c == 'z' {
+		db.names_push_back("...")
+	} else if c == 'u' {
+		t := parse_source_name(cs, last, db)
+		if t.Pos != cs.Pos {
+			cs.Pos = t.Pos
+		}
+	} else if c == 'D' {
+		if (first.Pos + 1) == last.Pos {
+			return first
+		}
+		
+		nc := first.nextChar()
+		if nc == 'd' {
+			db.names_push_back("decimal64")
+			cs.Pos = first.Pos + 2
+		} else if nc == 'e' {
+			db.names_push_back("decimal128")
+			cs.Pos = first.Pos + 2
+		} else if nc == 'f' {
+			db.names_push_back("decimal32")
+			cs.Pos = first.Pos + 2
+		} else if nc == 'h' {
+			db.names_push_back("decimal16")
+			cs.Pos = first.Pos + 2
+		} else if nc == 'i' {
+			db.names_push_back("char32_t")
+			cs.Pos = first.Pos + 2
+		} else if nc == 's' {
+			db.names_push_back("char16_t")
+			cs.Pos = first.Pos + 2
+		} else if nc == 'a' {
+			db.names_push_back("auto")
+			cs.Pos = first.Pos + 2
+		} else if nc == 'c' {
+			db.names_push_back("decltype(auto)")
+			cs.Pos = first.Pos + 2
+		} else if nc == 'n' {
+			db.names_push_back("std::nullptr_t")
+			cs.Pos = first.Pos + 2
+		} else {
+			
+		}
+	}
+	
 	return cs
 }
 
