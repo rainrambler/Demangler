@@ -82,6 +82,14 @@ func (p *CStyleString) isNext(another *CStyleString) bool {
 	return (p.Pos + 1) == another.Pos
 }
 
+func (p *CStyleString) calcDelta(another *CStyleString) int {
+	return p.Pos - another.Pos
+}
+
+func (p *CStyleString) equals(another *CStyleString) bool {
+	return (p.Pos == another.Pos)
+}
+
 type Db struct {
 	names                      sub_type
 	subs                       template_param_type
@@ -109,6 +117,16 @@ func (p *Db) subs_pop_back() {
 		return
 	}
 	p.subs.content = p.subs.content[:size - 1]
+}
+
+func (p *Db) subs_push_back(st sub_type) {
+	p.subs.content = append(p.subs.content, st)
+}
+
+func (p *Db) subs_push_back_pair(sp string_pair) {
+	var st sub_type
+	st.content = append(st.content, sp)
+	p.subs.content = append(p.subs.content, sp)
 }
 
 func (p *Db) names_pop_back() {
@@ -253,7 +271,7 @@ func parse_function_type(first, last *CStyleString, db *Db) CStyleString {
 		/* extern "C" */
 		t.Pos++
 		if t.Pos == last.Pos {
-			return first
+			return *first
 		}
 	}
 	
@@ -262,7 +280,7 @@ func parse_function_type(first, last *CStyleString, db *Db) CStyleString {
 		return cs
 	}
 
-	t = t1
+	t.Pos = t1.Pos
 	sig := "("
 	ref_qual := 0
 	
@@ -529,12 +547,120 @@ func parse_array_type(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
-func parse_name(first, last *CStyleString, db *Db) CStyleString {
+func parse_nested_name(first, last *CStyleString, db *Db, ends_with_template_args *bool) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
 	// TODO
+	return cs
+}
+
+func parse_local_name(first, last *CStyleString, db *Db, ends_with_template_args *bool) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_unscoped_name(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+// <name> ::= <nested-name> // N
+//        ::= <local-name> # See Scope Encoding below  // Z
+//        ::= <unscoped-template-name> <template-args>
+//        ::= <unscoped-name>
+
+// <unscoped-template-name> ::= <unscoped-name>
+//                          ::= <substitution>
+// line 4174
+func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	if last.calcDelta(first) < 2 {
+		return cs
+	}
+	
+	t0 := first
+	if t0.currentChar() == 'L' {
+		t0.Pos++
+	}
+	
+	if t0.currentChar() == 'N' {
+		t1 := parse_nested_name(t0, last, db, ends_with_template_args)
+		
+		if t1.Pos != t0.Pos {
+			cs.Pos = t1.Pos
+		}
+	} else if t0.currentChar() == 'Z' {
+		t1 := parse_local_name(t0, last, db, ends_with_template_args)
+		
+		if t1.Pos != t0.Pos {
+			cs.Pos = t1.Pos
+		}
+	} else {
+		t1 := parse_unscoped_name(t0, last, db)
+		
+		if t1.Pos != t0.Pos {
+			if (t1.Pos != last.Pos) && (t1.currentChar() == 'I') {
+				if db.names_empty() {
+					return cs
+				}
+				
+				db.subs_push_back_pair(db.names_back())
+				t0.Pos = t1.Pos
+				t1 = parse_template_args(t0, last, db)
+				if !t1.equals(t0) {
+					if db.names_size() < 2 {
+						return cs
+					}
+					
+					tmp := db.names_back().move_full()
+					db.names_pop_back()
+					db.names_back().first += tmp
+					cs.Pos = t1.Pos
+					if ends_with_template_args != nil {
+						*ends_with_template_args = true
+					}
+				}
+			} else {
+				// <unscoped-name>
+				cs.Pos = t1.Pos
+			}
+		} else {
+			// try <substitution> <template-args>
+			t1 = parse_substitution(t0, last, db)
+			if !t1.equals(t0) && !t1.equals(last) && (t1.currentChar() == 'I') {
+				t0.Pos = t1.Pos
+				t1 = parse_template_args(t0, last, db)
+				
+				if !t1.equals(t0) {
+					if db.names_size() < 2 {
+						return cs
+					}
+					
+					tmp := db.names_back().move_full()
+					db.names_pop_back()
+					db.names_back().first += tmp
+					cs.Pos = t1.Pos
+					if ends_with_template_args != nil {
+						*ends_with_template_args = true
+					}
+				}
+			}
+		}
+	}
+	
 	return cs
 }
 
@@ -657,8 +783,8 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 		return cs
 	}
 	
-	t := first
-	parsed_gs := false
+	//t := first
+	//parsed_gs := false
 	
 	
 	// TODO
@@ -954,7 +1080,7 @@ func parse_type(first, last *CStyleString, db *Db) CStyleString {
 				return cs
 			} else if c == 'S' {
 				if ((first.Pos + 1) != last.Pos) && (first.Content[first.Pos + 1] == 't') {
-					t := parse_name(first, last, db)
+					t := parse_name(first, last, db, nil)
 					if t.Pos != first.Pos {
 						if db.names_size() == 0 {
 							return cs
@@ -1037,7 +1163,7 @@ func parse_type(first, last *CStyleString, db *Db) CStyleString {
 				if t.Pos != first.Pos {
 					cs.Pos = t.Pos
 				} else {
-					t = parse_name(first, last, db)
+					t = parse_name(first, last, db, nil)
 					if t.Pos != first.Pos {
 						if db.names_empty() {
 							return cs
