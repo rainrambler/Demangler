@@ -47,6 +47,10 @@ type sub_type struct {
 	content []string_pair
 }
 
+func (p *sub_type) push_back(s string_pair) {
+	p.content = append(p.content, s)
+}
+
 type template_param_type struct {
 	content []sub_type
 }
@@ -60,12 +64,18 @@ type CStyleString struct {
 	Pos       int
 }
 
+/*
 func (p *CStyleString) firstChar() byte {
 	return p.Content[0]
 }
+*/
 
 func (p *CStyleString) currentChar() byte {
 	return p.Content[p.Pos]
+}
+
+func (p *CStyleString) nextChar() byte {
+	return p.Content[p.Pos + 1]
 }
 
 type Db struct {
@@ -83,6 +93,10 @@ type Db struct {
 
 func (p *Db) names_size() int {
 	return len(p.names.content)
+}
+
+func (p *Db) names_empty() bool {
+	return len(p.names.content) == 0
 }
 
 func (p *Db) subs_pop_back() {
@@ -217,6 +231,24 @@ func parse_function_type(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+func parse_decltype(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_vector_type(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
 func parse_pointer_to_member_type(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
@@ -244,12 +276,129 @@ func parse_source_name(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
-func parse_array_type(first, last *CStyleString, db *Db) CStyleString {
+func parse_number(first, last *CStyleString) CStyleString {
+	if first.Pos == last.Pos {
+		return *first
+	}
+	
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	t := first
+	if t.currentChar() == 'n' {
+		t.Pos++
+	}
+	
+	if t.Pos != last.Pos {
+		if t.currentChar() == '0' {
+			cs.Pos = t.Pos + 1
+		} else if isNonZeroNumberChar(t.currentChar()) {
+			cs.Pos = t.Pos + 1
+			
+			for (cs.Pos != last.Pos) && isNumberChar(cs.currentChar()) {
+				cs.Pos++
+			}
+		}
+	}
+	
+	return cs
+}
+
+func parse_array_type(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	if (first.Pos == last.Pos) || ((first.Pos + 1) == last.Pos) {
+		return cs
+	}
+	
+	if first.currentChar() != 'A' {
+		return cs
+	}
+	
+	if first.nextChar() == '_' {
+		var noprefix CStyleString
+		noprefix.Content = cs.Content
+		noprefix.Pos = cs.Pos + 2
+		t := parse_type(&noprefix, last, db)
+		if t.Pos != noprefix.Pos {
+			if db.names_empty() {
+				return cs
+			}
+			
+			if db.names_back().second[:2] == " [" {
+				// erase(0, 1)
+				db.names_back().second = db.names_back().second[1:]
+			}
+			
+			db.names_back().second = " []" + db.names_back().second
+			cs.Pos = t.Pos
+		}
+	} else if isNonZeroNumberChar(first.nextChar()) {
+		var noprefix CStyleString
+		noprefix.Content = cs.Content
+		noprefix.Pos = cs.Pos + 1
+		
+		t := parse_number(&noprefix, last)
+		if (t.Pos != last.Pos) && (t.currentChar() == '_') {
+			noprefix.Pos = t.Pos + 1
+			t2 := parse_type(&noprefix, last, db)
+			
+			if t2.Pos != noprefix.Pos {
+				if db.names_empty() {
+					return cs
+				}
+				
+				if db.names_back().second[:2] == " [" {
+					db.names_back().second = db.names_back().second[1:]
+				}
+				
+				// " [" + typename C::String(first+1, t) + "]" ???
+				tn := " [" + first.Content[first.Pos + 1:t.Pos] + "]"
+				db.names_back().second = tn + db.names_back().second
+				cs.Pos = t2.Pos
+			}
+		}
+	} else {
+		var noprefix CStyleString
+		noprefix.Content = cs.Content
+		noprefix.Pos = cs.Pos + 1
+		
+		t := parse_expression(&noprefix, last, db)
+		if t.Pos == last.Pos {
+			return cs
+		}
+		
+		if t.Pos == noprefix.Pos {
+			return cs
+		}
+		
+		if t.currentChar() != '_' {
+			return cs
+		}
+		
+		noprefix.Pos = t.Pos + 1
+		t2 := parse_type(noprefix, last, db)
+		if t2.Pos == noprefix.Pos {
+			return cs
+		}
+		
+		if db.names_size() < 2 {
+			return first
+		}
+		
+		ty := db.names_back()
+		db.names_pop_back()
+		expr := db.names_back()
+		db.names_back().first = ty.first
+		if ty.second[:2] == " [" {
+			ty.second = ty.second[1:]
+		}
+		db.names_back().second = " [" + expr.move_full() + "]" + ty.second
+		cs.Pos = t2.Pos
+	}
+
 	return cs
 }
 
@@ -272,6 +421,15 @@ func parse_substitution(first, last *CStyleString, db *Db) CStyleString {
 }
 
 func parse_builtin_type(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
@@ -576,10 +734,92 @@ func parse_type(first, last *CStyleString, db *Db) CStyleString {
 						}
 						
 						cs.Pos = t.Pos
-					} else {
-						t = parse_substitution(first, last, db)
+					} 
+				} else {
+					t = parse_substitution(first, last, db)
+					if t.Pos != first.Pos {
+						cs.Pos = t.Pos
+						// Parsed a substitution.  If the substitution is a
+                           //  <template-param> it might be followed by <template-args>.
+						t = parse_template_args(first, last, db)
+						if t.Pos != first.Pos {
+							if db.names_size() < 2 {
+								return cs
+							}
+							
+							template_args := db.names_back().move_full()
+							db.names_pop_back()
+							db.names_back().first += template_args
+							// Need to create substitution for <template-template-param> <template-args>
+							// TODO
+							cs.Pos = t.Pos
+						}
 					}
 				}
+				
+				return cs
+			} else if c == 'D' {
+				if (first.Pos + 1) == last.Pos {
+					return cs
+				}
+				
+				c := first.Content[first.Pos + 1]
+				if c == 'p' {
+					k0 := db.names_size()
+					
+					var startStr CStyleString
+					startStr.Content = first.Content
+					startStr.Pos = first.Pos + 2
+					t := parse_type(&startStr, last, db)
+					k1 := db.names_size()
+					if t.Pos != startStr.Pos {
+						// db.subs.emplace_back(db.names.get_allocator());
+						for k := k0; k < k1; k++ {
+							db.subs_back().push_back(db.names.content[k])
+						}
+						cs.Pos = t.Pos						
+					}
+					
+					return cs
+				} else if (c == 't') || (c == 'T') {
+					t = parse_decltype(first, last, db)
+					if t.Pos != first.Pos {
+						if db.names_empty() {
+							return cs
+						}
+						
+						cs.Pos = t.Pos						
+					}
+					return cs
+				} else if (c == 'v') {
+					t = parse_vector_type(first, last, db)
+					if t.Pos != first.Pos {
+						if db.names_empty() {
+							return cs
+						}
+						
+						cs.Pos = t.Pos	
+					}
+					return cs
+				}
+			} else {
+				// default
+				// must check for builtin-types before class-enum-types to avoid
+                // ambiguities with operator-names
+				t = parse_builtin_type(first, last, db)
+				if t.Pos != first.Pos {
+					cs.Pos = t.Pos
+				} else {
+					t = parse_name(first, last, db)
+					if t.Pos != first.Pos {
+						if db.names_empty() {
+							return cs
+						}
+						
+						cs.Pos = t.Pos
+					}
+				}
+				
 			}
 		}
 	}
