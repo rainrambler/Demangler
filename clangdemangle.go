@@ -570,12 +570,44 @@ func parse_array_type(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <unqualified-name> ::= <operator-name>
+//                    ::= <ctor-dtor-name>
+//                    ::= <source-name>   
+//                    ::= <unnamed-type-name>
+// line 3082
 func parse_unqualified_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if first.equals(last) {
+		return cs
+	}
+	
+	c := cs.curChar()
+	if (c == 'C') || (c == 'D') {
+		t := parse_ctor_dtor_name(first, last, db)
+		if !t.equals(&cs) {
+			cs.Pos = t.Pos
+		}
+	} else if c == 'U' {
+		t := parse_unnamed_type_name(first, last, db)
+		if !t.equals(&cs) {
+			cs.Pos = t.Pos
+		}
+	} else if isNonZeroNumberChar(c) {
+		// 1~9
+		t := parse_source_name(first, last, db)
+		if !t.equals(&cs) {
+			cs.Pos = t.Pos
+		}
+	} else {
+		t := parse_operator_name(first, last, db)
+		if !t.equals(&cs) {
+			cs.Pos = t.Pos
+		}
+	}
+	
 	return cs
 }
 
@@ -781,6 +813,33 @@ func parse_nested_name(first, last *CStyleString, db *Db, ends_with_template_arg
 }
 
 func parse_local_name(first, last *CStyleString, db *Db, ends_with_template_args *bool) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_operator_name(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_unnamed_type_name(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_ctor_dtor_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
