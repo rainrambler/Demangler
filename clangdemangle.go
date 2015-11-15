@@ -78,6 +78,10 @@ func (p *CStyleString) nextChar() byte {
 	return p.Content[p.Pos + 1]
 }
 
+func (p *CStyleString) isNext(another *CStyleString) bool {
+	return (p.Pos + 1) == another.Pos
+}
+
 type Db struct {
 	names                      sub_type
 	subs                       template_param_type
@@ -222,12 +226,108 @@ func parse_template_param(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+//  <ref-qualifier> ::= R                   # & ref-qualifier
+//  <ref-qualifier> ::= O                   # && ref-qualifier
+//  <function-type> ::= F [Y] <bare-function-type> [<ref-qualifier>] E
 func parse_function_type(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if first.Pos == last.Pos {
+		return *first
+	}
+	
+	if first.currentChar() != 'F' {
+		return *first
+	}
+	
+	t := first
+	t.Pos++
+	
+	if t.Pos == last.Pos {
+		return cs
+	}
+	
+	if t.currentChar() == 'Y' {
+		/* extern "C" */
+		t.Pos++
+		if t.Pos == last.Pos {
+			return first
+		}
+	}
+	
+	t1 := parse_type(t, last, db)
+	if t1.Pos == t.Pos {
+		return cs
+	}
+
+	t = t1
+	sig := "("
+	ref_qual := 0
+	
+	for {
+		if t.Pos == last.Pos {
+			db.names_pop_back()
+			return cs
+		}
+		
+		c := t.currentChar()
+		if c == 'E' {
+			t.Pos++
+			break
+		}
+		if c == 'v' {
+			t.Pos++
+			continue
+		}
+		if (c == 'R') && !t.isNext(last) && (t.nextChar() == 'E') {
+			t.Pos++
+			ref_qual = 1
+			continue
+		}
+		if (c == 'O') && !t.isNext(last) && (t.nextChar() == 'E') {
+			t.Pos++
+			ref_qual = 2
+			continue
+		}
+		
+		k0 := db.names_size()
+		t1 := parse_type(t, last, db)
+		k1 := db.names_size()
+		if (t1.Pos == t.Pos) || (t1.Pos == last.Pos) {
+			return cs
+		}
+		for k := k0; k < k1; k++ {
+			if len(sig) > 1 {
+				sig += ", "
+			}
+			sig += db.names.content[k].move_full()
+		}
+		for k := k0; k < k1; k++ {
+			db.names_pop_back()
+		}
+		
+		t.Pos = t1.Pos
+	}
+	sig += ")"
+	
+	if ref_qual == 1 {
+		sig += " &"
+	} else if ref_qual == 2 {
+		sig += " &&"
+	} else {
+		
+	}
+	
+	if db.names_empty() {
+		return cs
+	}
+	
+	db.names_back().first += " "
+	db.names_back().second = sig + db.names_back().second
+	cs.Pos = t.Pos
+	
 	return cs
 }
 
@@ -551,6 +651,15 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
+	
+	delta := last.Pos - first.Pos
+	if delta < 2 {
+		return cs
+	}
+	
+	t := first
+	parsed_gs := false
+	
 	
 	// TODO
 	return cs
