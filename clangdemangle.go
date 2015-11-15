@@ -74,6 +74,10 @@ func (p *CStyleString) currentChar() byte {
 	return p.Content[p.Pos]
 }
 
+func (p *CStyleString) curChar() byte {
+	return p.Content[p.Pos]
+}
+
 func (p *CStyleString) nextChar() byte {
 	return p.Content[p.Pos + 1]
 }
@@ -88,6 +92,16 @@ func (p *CStyleString) calcDelta(another *CStyleString) int {
 
 func (p *CStyleString) equals(another *CStyleString) bool {
 	return (p.Pos == another.Pos)
+}
+
+func (p *CStyleString) notEach(a1, a2 *CStyleString) bool {
+	if p.equals(a1) {
+		return false
+	}
+	if p.equals(a2) {
+		return false
+	}
+	return true
 }
 
 type Db struct {
@@ -111,6 +125,10 @@ func (p *Db) names_empty() bool {
 	return len(p.names.content) == 0
 }
 
+func (p *Db) subs_empty() bool {
+	return len(p.subs.content) == 0
+}
+
 func (p *Db) subs_pop_back() {
 	size := len(p.subs.content)
 	if size == 0 {
@@ -126,7 +144,7 @@ func (p *Db) subs_push_back(st sub_type) {
 func (p *Db) subs_push_back_pair(sp string_pair) {
 	var st sub_type
 	st.content = append(st.content, sp)
-	p.subs.content = append(p.subs.content, sp)
+	p.subs.content = append(p.subs.content, st)
 }
 
 func (p *Db) names_pop_back() {
@@ -140,6 +158,11 @@ func (p *Db) names_pop_back() {
 func (p *Db) names_push_back(s string) {
 	var pair string_pair
 	pair.first = s
+	p.names.content = append(p.names.content, pair)
+}
+
+func (p *Db) names_emplace_back() {
+	pair := string_pair{}
 	p.names.content = append(p.names.content, pair)
 }
 
@@ -547,12 +570,213 @@ func parse_array_type(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
-func parse_nested_name(first, last *CStyleString, db *Db, ends_with_template_args *bool) CStyleString {
+func parse_unqualified_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
 	// TODO
+	return cs
+}
+
+// <nested-name> ::= N [<CV-qualifiers>] [<ref-qualifier>] <prefix> <unqualified-name> E
+//               ::= N [<CV-qualifiers>] [<ref-qualifier>] <template-prefix> <template-args> E
+// 
+// <prefix> ::= <prefix> <unqualified-name>
+//          ::= <template-prefix> <template-args>
+//          ::= <template-param>
+//          ::= <decltype>
+//          ::= # empty
+//          ::= <substitution>
+//          ::= <prefix> <data-member-prefix>
+//  extension ::= L
+// 
+// <template-prefix> ::= <prefix> <template unqualified-name>
+//                   ::= <template-param>
+//                   ::= <substitution>
+func parse_nested_name(first, last *CStyleString, db *Db, ends_with_template_args *bool) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	if first.equals(last) {
+		return cs
+	}
+	
+	if first.curChar() != 'N' {
+		return cs
+	}
+	
+	cv := 0
+	cs.Pos++
+	t0 := parse_cv_qualifiers(&cs, last, &cv)
+	if t0.equals(last) {
+		return *first
+	}
+	
+	db.ref = 0
+	if t0.curChar() == 'R' {
+		db.ref = 1
+		t0.Pos++
+	} else if t0.curChar() == 'O' {
+		db.ref = 2
+		t0.Pos++
+	}
+	
+	db.names_emplace_back()
+	
+	if (last.calcDelta(&t0) >= 2) && (t0.curChar() == 'S') &&
+		(t0.nextChar() == 't') {
+		t0.Pos += 2
+		db.names_back().first = "std"	
+	}
+	
+	if t0.equals(last) {
+		db.names_pop_back()
+		return *first
+	}
+	
+	pop_subs := false
+	component_ends_with_template_args := false
+	for t0.curChar() != 'E' {
+		component_ends_with_template_args = false
+		var t1 CStyleString
+		
+		if t0.curChar() == 'S' {
+			if !t0.isNext(last) && t0.nextChar() == 't' {
+				// do_parse_unqualified_name
+				t1 = parse_unqualified_name(&t0, last, db)
+				if !t1.equals(&t0) && !t1.equals(last) {
+					name := db.names_back().move_full()
+					db.names_pop_back()
+					if len(db.names_back().first) > 0 {
+						db.names_back().first += "::" + name						
+					} else {
+						db.names_back().first = name
+					}
+					db.subs_push_back_pair(*db.names_back())
+					pop_subs = true
+					t0.Pos = t1.Pos
+				} else {
+					return *first
+				}
+				// end do_parse_unqualified_name
+			} else {
+				t1 = parse_substitution(&t0, last, db)
+				if !t1.equals(&t0) && !t1.equals(last) {
+					name := db.names_back().move_full()
+					db.names_pop_back()
+					if len(db.names_back().first) > 0 {
+						db.names_back().first += "::" + name
+						db.subs_push_back_pair(*db.names_back())
+					} else {
+						db.names_back().first = name
+					}
+					pop_subs = true
+					t0.Pos = t1.Pos
+				} else {
+					return *first
+				}
+			}			
+		} else if t0.curChar() == 'T' {
+			t1 = parse_template_param(&t0, last, db)
+			if t1.notEach(&t0, last) {
+				name := db.names_back().move_full()
+				db.names_pop_back()
+				if len(db.names_back().first) > 0 {
+					db.names_back().first += "::" + name					
+				} else {
+					db.names_back().first = name
+				}
+				db.subs_push_back_pair(*db.names_back())
+				pop_subs = true
+				t0.Pos = t1.Pos
+			} else {
+				return *first
+			}
+		} else if t0.curChar() == 'D' {
+			if !t0.isNext(last) && (t0.nextChar() != 't') && (t0.nextChar() != 'T') {
+				// do_parse_unqualified_name
+				t1 = parse_unqualified_name(&t0, last, db)
+				if !t1.equals(&t0) && !t1.equals(last) {
+					name := db.names_back().move_full()
+					db.names_pop_back()
+					if len(db.names_back().first) > 0 {
+						db.names_back().first += "::" + name						
+					} else {
+						db.names_back().first = name
+					}
+					db.subs_push_back_pair(*db.names_back())
+					pop_subs = true
+					t0.Pos = t1.Pos
+				} else {
+					return *first
+				}
+				// end do_parse_unqualified_name
+			} else {
+				t1 = parse_decltype(&t0, last, db)
+				if t1.notEach(&t0, last) {
+					name := db.names_back().move_full()
+					db.names_pop_back()
+					if len(db.names_back().first) > 0 {
+						db.names_back().first += "::" + name						
+					} else {
+						db.names_back().first = name
+					}
+					db.subs_push_back_pair(*db.names_back())
+					pop_subs = true
+					t0.Pos = t1.Pos
+				} else {
+					return *first
+				}
+			}
+		} else if t0.curChar() == 'I' {
+			t1 = parse_template_args(&t0, last, db)
+			if t1.notEach(&t0, last) {
+				name := db.names_back().move_full()
+				db.names_pop_back()
+				db.names_back().first += name
+				db.subs_push_back_pair(*db.names_back())
+				t0.Pos = t1.Pos
+				component_ends_with_template_args = true
+			} else {
+				return *first
+			}
+		}  else if t0.curChar() == 'L' {
+			t0.Pos++
+			if t0.equals(last) {
+				return *first
+			}
+		} else {
+			// do_parse_unqualified_name
+			t1 = parse_unqualified_name(&t0, last, db)
+			if !t1.equals(&t0) && !t1.equals(last) {
+				name := db.names_back().move_full()
+				db.names_pop_back()
+				if len(db.names_back().first) > 0 {
+					db.names_back().first += "::" + name						
+				} else {
+					db.names_back().first = name
+				}
+				db.subs_push_back_pair(*db.names_back())
+				pop_subs = true
+				t0.Pos = t1.Pos
+			} else {
+				return *first
+			}
+			// end do_parse_unqualified_name
+		}
+	}
+	
+	cs.Pos = t0.Pos + 1
+	db.cv = cv
+	if pop_subs && !db.subs_empty() {
+		db.subs_pop_back()
+	}
+	if ends_with_template_args != nil {
+		*ends_with_template_args = component_ends_with_template_args
+	}
+	
 	return cs
 }
 
@@ -617,7 +841,7 @@ func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool
 					return cs
 				}
 				
-				db.subs_push_back_pair(db.names_back())
+				db.subs_push_back_pair(*db.names_back())
 				t0.Pos = t1.Pos
 				t1 = parse_template_args(t0, last, db)
 				if !t1.equals(t0) {
