@@ -101,6 +101,12 @@ func (p *Db) names_pop_back() {
 	p.names.content = p.names.content[:size - 1]
 }
 
+func (p *Db) names_push_back(s string) {
+	var pair string_pair
+	pair.first = s
+	p.names.content = append(p.names.content, pair)
+}
+
 // the last subs
 func (p *Db) subs_back() *sub_type {
 	size := len(p.subs.content)
@@ -239,6 +245,24 @@ func parse_source_name(first, last *CStyleString, db *Db) CStyleString {
 }
 
 func parse_array_type(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_name(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_substitution(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
@@ -505,8 +529,55 @@ func parse_type(first, last *CStyleString, db *Db) CStyleString {
 				cs.Pos++
 				if cs.Pos != last.Pos {
 					t := parse_source_name(&cs, last, db)
-					if t.Pos != cs.Pos {
-						// TODO
+					if t.Pos != cs.Pos {						
+						t2 := parse_type(&t, last, db)
+						if t2.Pos != t.Pos {
+							if db.names_size() < 2 {
+								return *first
+							}
+							
+							ty := db.names_back().move_full()
+							db.names_pop_back()
+							if db.names_back().first[:9] != "objcproto" {
+								db.names_back().first = ty + " " + 
+									db.names_back().move_full()
+							} else {
+								// TODO
+								proto := db.names_back().move_full()
+								db.names_pop_back()
+								
+								var start CStyleString
+								start.Content = proto
+								start.Pos = 9
+								
+								var protoLast CStyleString
+								protoLast.Content = proto
+								protoLast.Pos = len(proto)
+								t = parse_source_name(&start, &protoLast, db)
+								if t.Pos != start.Pos {
+									db.names_back().first = ty + "<" + db.names_back().move_full() + ">"
+								} else {
+									//db.names.content = append(db.names.content, ty + " " + proto)
+									db.names_push_back(ty + " " + proto)
+								}
+							}
+							
+							cs.Pos = t2.Pos
+						}
+					}
+				}
+				return cs
+			} else if c == 'S' {
+				if ((first.Pos + 1) != last.Pos) && (first.Content[first.Pos + 1] == 't') {
+					t := parse_name(first, last, db)
+					if t.Pos != first.Pos {
+						if db.names_size() == 0 {
+							return cs
+						}
+						
+						cs.Pos = t.Pos
+					} else {
+						t = parse_substitution(first, last, db)
 					}
 				}
 			}
