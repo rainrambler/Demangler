@@ -109,6 +109,10 @@ func isNumberChar(c byte) bool {
 	return (c >= '0') && (c <= '9')
 }
 
+func isNonZeroNumberChar(c byte) bool {
+	return (c >= '1') && (c <= '9')
+}
+
 func (p *Demangler) fillFuncName() {
 	if p.FuncName == "" {
 		size := len(p.NestedNames)
@@ -182,7 +186,7 @@ func (p *Demangler) unmangle(mangled string) {
 func (p *Demangler) parseEncoding() {
 	fmt.Printf("DBG: Demangler.parseEncoding mangledname: %v\n", p.Remain)
 	if isSpecialName(p.Remain) {
-		p.parseSpecialName()
+		p.parseSpecialName() // 'T'. 'G'?
 	} else {
 		var en EntityName
 		en.Remain = p.Remain
@@ -404,12 +408,31 @@ func (p *EntityName) parseUnscopedName() string {
 		 ::= S_
 */
 func (p *EntityName) parseSubstitution() {
+	if len(p.Remain) < 2 {
+		fmt.Printf("WARN: EntityName.parseSubstitution Unknown name: %v\n", p.Remain)
+		return
+	}
+	
+	prefix := p.Remain[:2]
+	
+	if prefix == "S_" {
+		
+	}
 	// TODO
 	panic("Not Implemented")
 }
 
+/*
+<local-name> := Z <function encoding> E <entity name> [<discriminator>]
+             := Z <function encoding> E s [<discriminator>]
+
+<discriminator> := _ <non-negative number>      # when number < 10
+                := __ <non-negative number> _   # when number >= 10
+*/
 func (p *EntityName) parseLocalName() {
 	// TODO
+	p.Remain = p.Remain[1:]
+	
 	panic("Not Implemented")
 }
 

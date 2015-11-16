@@ -830,12 +830,128 @@ func parse_operator_name(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <unnamed-type-name> ::= Ut [ <nonnegative number> ] _
+//                     ::= <closure-type-name>
+// 
+// <closure-type-name> ::= Ul <lambda-sig> E [ <nonnegative number> ] _ 
+// 
+// <lambda-sig> ::= <parameter type>+  # Parameter types or "v" if the lambda has no parameters
 func parse_unnamed_type_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if last.calcDelta(first) <= 2 {
+		return cs
+	}
+	
+	if first.curChar() != 'U' {
+		return cs
+	}
+	
+	ty := cs.nextChar()
+	if ty == 't' {
+		db.names_push_back("'unnamed")
+		t0 := cs
+		t0.Pos += 2
+		if t0.equals(last) {
+			db.names_pop_back()
+			return cs
+		}
+		
+		if isNumberChar(t0.curChar()) {
+			t1 := t0
+			t1.Pos = t0.Pos + 1
+			
+			for !t1.equals(last) && isNumberChar(t1.curChar()) {
+				t1.Pos++
+			}
+			
+			// TODO 
+			// db.names.back().first.append(t0, t1);
+			db.names_back().first += t1.Content[t0.Pos:t1.Pos]
+			t0.Pos = t1.Pos
+		}
+		
+		db.names_back().first += "'"
+		if t0.equals(last) || (t0.curChar() != '_') {
+			db.names_pop_back()
+			return cs
+		}
+		
+		cs.Pos = t0.Pos + 1
+	} else if ty == 'l' {
+		db.names_push_back("'lambda'(")
+		t0 := &CStyleString{cs.Content, cs.Pos}
+		t0.Pos = cs.Pos + 2
+		if t0.curChar() == 'v' {
+			db.names_back().first += ")"
+			t0.Pos++
+		} else {
+			t1 := parse_type(t0, last, db)
+			if t1.equals(t0) {
+				db.names_pop_back()
+				return cs
+			}
+			
+			if db.names_size() < 2 {
+				return cs
+			}
+			
+			tmp := db.names_back().move_full()
+			db.names_pop_back()
+			db.names_back().first += tmp
+			t0.Pos = t1.Pos
+			
+			for {
+				t1 = parse_type(t0, last, db)
+				if t1.equals(t0) {
+					break
+				}
+				if db.names_size() < 2 {
+					return cs
+				}
+				tmp = db.names_back().move_full()
+				db.names_pop_back()
+				if len(tmp) > 0 {
+					db.names_back().first += ", " + tmp					
+				}
+				t0.Pos = t1.Pos
+			}
+			db.names_back().first += ")"			
+		}
+		
+		if t0.equals(last) || (t0.curChar() != 'E') {
+			db.names_pop_back()
+			return cs
+		}
+		
+		t0.Pos++
+		if t0.equals(last) {
+			db.names_pop_back()
+			return cs
+		}
+		
+		if isNumberChar(t0.curChar()) {
+			t1 := &CStyleString{t0.Content, t0.Pos + 1}
+			for !t1.equals(last) && isNumberChar(t1.curChar()) {
+				t1.Pos++
+			}
+			
+			part := t1.Content[t0.Pos:t1.Pos]
+			s := db.names.back().first
+			db.names.back().first = s[:7] + part + s[7:]
+			t0.Pos = t1.Pos
+		}
+		
+		if t0.equals(last) || (t0.curChar() != '_') {
+			db.names_pop_back()
+			return cs
+		}
+		
+		cs.Pos = t0.Pos + 1
+	}
+	
 	return cs
 }
 
@@ -889,6 +1005,9 @@ func parse_ctor_dtor_name(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <unscoped-name> ::= <unqualified-name>
+//                 ::= St <unqualified-name>   # ::std::
+// extension       ::= StL<unqualified-name>
 func parse_unscoped_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
