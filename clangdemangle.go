@@ -214,30 +214,6 @@ func demangle2(mangled string, first, last int, db *Db, status *int) {
 	}
 }
 
-// clang\cxxabi\src\cxa_demangle.cpp line 4491
-func parse_encoding(mangled string, first, last int, db *Db) string {
-	if first == last {
-		return mangled
-	}
-	
-	//prevDepth := db.encoding_depth
-	db.encoding_depth++
-	
-	//prevTagTempl := db.tag_templates
-	if db.encoding_depth > 1 {
-		db.tag_templates = true
-	}
-	
-	c := mangled[first]
-	if (c == 'G') || (c == 'T') {
-		
-	} else {
-		
-	}
-	
-	return mangled
-}
-
 func parse_special_name(mangled string, first, last int, db *Db, result *CStyleString) {
 	if (last - first) <= 2 {
 		// invalid, not parsed
@@ -417,11 +393,41 @@ func parse_vector_type(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// clang\cxxabi\src\cxa_demangle.cpp line 4491
+func parse_encoding(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
 func parse_pointer_to_member_type(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
+	// TODO
+	return cs
+}
+
+// <discriminator> := _ <non-negative number>      # when number < 10
+//                 := __ <non-negative number> _   # when number >= 10
+//  extension      := decimal-digit+               # at the end of string
+// parse but ignore discriminator
+func parse_discriminator(first, last *CStyleString) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	if first.equals(last) {
+		return cs
+	}
+	
+	if first.curChar() == '_' {
+		
+	}
 	// TODO
 	return cs
 }
@@ -812,12 +818,82 @@ func parse_nested_name(first, last *CStyleString, db *Db, ends_with_template_arg
 	return cs
 }
 
+// <local-name> := Z <function encoding> E <entity name> [<discriminator>]
+//              := Z <function encoding> E s [<discriminator>]
+//              := Z <function encoding> Ed [ <parameter number> ] _ <entity name>
 func parse_local_name(first, last *CStyleString, db *Db, ends_with_template_args *bool) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if last.equals(first) {
+		return cs
+	}
+	
+	if first.curChar() != 'Z' {
+		return cs
+	}
+	
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 1}
+	t := parse_encoding(tmpPos, last, db)
+	
+	if t.curChar() != 'E' {
+		return cs
+	}
+	
+	if t.equals(tmpPos) || t.equals(last) || t.isNext(last) {
+		return cs
+	}
+	
+	t.Pos++ // ???
+	c := t.curChar()
+	switch c {
+		case 's':
+		tmpPos.Pos = t.Pos + 1
+		curPos := parse_discriminator(tmpPos, last)
+		if db.names_empty() {
+			return curPos
+		}
+		db.names_back().first += "::string literal"
+		break
+		case 'd':
+		tmpPos.Pos = t.Pos + 1
+		if !tmpPos.equals(last) {
+			t1 := parse_number(tmpPos, last)
+			if !t1.equals(last) && (t1.curChar() == '_') {
+				t.Pos = t1.Pos + 1
+				t1 = parse_name(&t, last, db, ends_with_template_args)
+				if !t1.equals(&t) {
+					if db.names_size() < 2 {
+						return cs
+					}
+					
+					name := db.names_back().move_full()
+					db.names_pop_back()
+					db.names_back().first += "::" + name
+					cs.Pos = t1.Pos
+				} else {
+					db.names_pop_back()
+				}			
+			} 
+		}
+		break
+		default:
+		t1 := parse_name(&t, last, db, ends_with_template_args)
+		if !t1.equals(&t) {
+			curPos := parse_discriminator(&t1, last)
+			if db.names_size() < 2 {
+				return curPos
+			}
+			name := db.names_back().move_full()
+			db.names_pop_back()
+			db.names_back().first += "::" + name			
+		} else {
+			db.names_pop_back()
+		}
+		break
+	}
+	
 	return cs
 }
 
