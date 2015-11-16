@@ -821,12 +821,338 @@ func parse_local_name(first, last *CStyleString, db *Db, ends_with_template_args
 	return cs
 }
 
+//   <operator-name>
+//                   ::= aa    # &&            
+//                   ::= ad    # & (unary)     
+//                   ::= an    # &             
+//                   ::= aN    # &=            
+//                   ::= aS    # =             
+//                   ::= cl    # ()            
+//                   ::= cm    # ,             
+//                   ::= co    # ~             
+//                   ::= cv <type>    # (cast)        
+//                   ::= da    # delete[]      
+//                   ::= de    # * (unary)     
+//                   ::= dl    # delete        
+//                   ::= dv    # /             
+//                   ::= dV    # /=            
+//                   ::= eo    # ^             
+//                   ::= eO    # ^=            
+//                   ::= eq    # ==            
+//                   ::= ge    # >=            
+//                   ::= gt    # >             
+//                   ::= ix    # []            
+//                   ::= le    # <=            
+//                   ::= li <source-name>  # operator ""
+//                   ::= ls    # <<            
+//                   ::= lS    # <<=           
+//                   ::= lt    # <             
+//                   ::= mi    # -             
+//                   ::= mI    # -=            
+//                   ::= ml    # *             
+//                   ::= mL    # *=            
+//                   ::= mm    # -- (postfix in <expression> context)           
+//                   ::= na    # new[]
+//                   ::= ne    # !=            
+//                   ::= ng    # - (unary)     
+//                   ::= nt    # !             
+//                   ::= nw    # new           
+//                   ::= oo    # ||            
+//                   ::= or    # |             
+//                   ::= oR    # |=            
+//                   ::= pm    # ->*           
+//                   ::= pl    # +             
+//                   ::= pL    # +=            
+//                   ::= pp    # ++ (postfix in <expression> context)
+//                   ::= ps    # + (unary)
+//                   ::= pt    # ->            
+//                   ::= qu    # ?             
+//                   ::= rm    # %             
+//                   ::= rM    # %=            
+//                   ::= rs    # >>            
+//                   ::= rS    # >>=           
+//                   ::= v <digit> <source-name>        # vendor extended operator
+// line 2333
 func parse_operator_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if last.calcDelta(first) < 2 {
+		return cs
+	}
+	
+	c0 := cs.curChar()
+	c1 := cs.nextChar()
+	if c0 == 'a' {
+		switch (c1)	{
+		case 'a':
+			db.names_push_back("operator&&");
+			cs.Pos += 2
+			break;
+		case 'd':
+		case 'n':
+			db.names_push_back("operator&");
+			cs.Pos += 2
+			break;
+		case 'N':
+			db.names_push_back("operator&=");
+			cs.Pos += 2
+			break;
+		case 'S':
+			db.names_push_back("operator=");
+			cs.Pos += 2
+			break;
+		}
+	} else if c0 == 'c' {
+		switch (c1) {
+		case 'l':
+			db.names_push_back("operator()")
+			cs.Pos += 2
+			break
+		case 'm':
+			db.names_push_back("operator,")
+			cs.Pos += 2
+			break
+		case 'o':
+			db.names_push_back("operator~")
+			cs.Pos += 2
+			break
+		case 'v':
+			{
+				tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+				try_to_parse_template_args := db.try_to_parse_template_args
+				db.try_to_parse_template_args = false
+				t := parse_type(tmpPos, last, db)
+				db.try_to_parse_template_args = try_to_parse_template_args
+				if (!t.equals(tmpPos)) {
+					if (db.names_empty()) {
+						return cs
+					}
+					
+					s := db.names_back().first
+					db.names_back().first = "operator " + s
+					db.parsed_ctor_dtor_cv = true
+					cs.Pos = t.Pos
+				}
+			}
+			break
+		}
+	} else if c0 == 'd' {
+		switch (c1)	{
+		case 'a':
+			db.names_push_back("operator delete[]")
+			cs.Pos += 2
+			break
+		case 'e':
+			db.names_push_back("operator*")
+			cs.Pos += 2
+			break
+		case 'l':
+			db.names_push_back("operator delete")
+			cs.Pos += 2
+			break
+		case 'v':
+			db.names_push_back("operator/")
+			cs.Pos += 2
+			break
+		case 'V':
+			db.names_push_back("operator/=")
+			cs.Pos += 2
+			break
+		}
+	} else if c0 == 'e' {
+		switch (c1) {
+		case 'o':
+			db.names_push_back("operator^")
+			cs.Pos += 2
+			break
+		case 'O':
+			db.names_push_back("operator^=")
+			cs.Pos += 2
+			break
+		case 'q':
+			db.names_push_back("operator==")
+			cs.Pos += 2
+			break
+		}
+	} else if c0 == 'g' {
+		switch (c1)	{
+		case 'e':
+			db.names_push_back("operator>=")
+			cs.Pos += 2
+			break
+		case 't':
+			db.names_push_back("operator>")
+			cs.Pos += 2
+			break
+		}
+	} else if c0 == 'i' {
+		if (c1 == 'x') {
+			db.names_push_back("operator[]")
+			cs.Pos += 2
+		}
+	} else if c0 == 'l' {
+		switch (c1)	{
+		case 'e':
+			db.names_push_back("operator<=")
+			cs.Pos += 2
+			break
+		case 'i':
+			{
+				tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+				t := parse_source_name(tmpPos, last, db)
+				if (!t.equals(tmpPos)) {
+					if (db.names_empty()) {
+						return cs
+					}
+					s := db.names_back().first
+					db.names_back().first = "operator\"\" " + s
+					cs.Pos = t.Pos
+				}
+			}
+			break
+		case 's':
+			db.names_push_back("operator<<")
+			cs.Pos += 2
+			break
+		case 'S':
+			db.names_push_back("operator<<=")
+			cs.Pos += 2
+			break
+		case 't':
+			db.names_push_back("operator<")
+			cs.Pos += 2
+			break
+		}
+	} else if c0 == 'm' {
+		switch (c1)	{
+		case 'i':
+			db.names_push_back("operator-")
+			cs.Pos += 2
+			break
+		case 'I':
+			db.names_push_back("operator-=")
+			cs.Pos += 2
+			break
+		case 'l':
+			db.names_push_back("operator*")
+			cs.Pos += 2
+			break
+		case 'L':
+			db.names_push_back("operator*=")
+			cs.Pos += 2
+			break
+		case 'm':
+			db.names_push_back("operator--")
+			cs.Pos += 2
+			break
+		}
+	} else if c0 == 'n' {
+		switch (c1)	{
+		case 'a':
+			db.names_push_back("operator new[]")
+			cs.Pos += 2
+			break
+		case 'e':
+			db.names_push_back("operator!=")
+			cs.Pos += 2
+			break
+		case 'g':
+			db.names_push_back("operator-")
+			cs.Pos += 2
+			break
+		case 't':
+			db.names_push_back("operator!")
+			cs.Pos += 2
+			break
+		case 'w':
+			db.names_push_back("operator new")
+			cs.Pos += 2
+			break
+		}
+	} else if c0 == 'o' {
+		switch (c1)	{
+		case 'o':
+			db.names_push_back("operator||")
+			cs.Pos += 2
+			break
+		case 'r':
+			db.names_push_back("operator|")
+			cs.Pos += 2
+			break
+		case 'R':
+			db.names_push_back("operator|=")
+			cs.Pos += 2
+			break
+		}
+	} else if c0 == 'p' {
+		switch (c1)	{
+		case 'm':
+			db.names_push_back("operator->*")
+			cs.Pos += 2
+			break
+		case 'l':
+			db.names_push_back("operator+")
+			cs.Pos += 2
+			break
+		case 'L':
+			db.names_push_back("operator+=")
+			cs.Pos += 2
+			break
+		case 'p':
+			db.names_push_back("operator++")
+			cs.Pos += 2
+			break
+		case 's':
+			db.names_push_back("operator+")
+			cs.Pos += 2
+			break
+		case 't':
+			db.names_push_back("operator->")
+			cs.Pos += 2
+			break
+		}
+	} else if c0 == 'q' {
+		if (c1 == 'u') {
+			db.names_push_back("operator?")
+			cs.Pos += 2
+		}
+	} else if c0 == 'r' {
+		switch (c1)	{
+		case 'm':
+			db.names_push_back("operator%")
+			cs.Pos += 2
+			break
+		case 'M':
+			db.names_push_back("operator%=")
+			cs.Pos += 2
+			break
+		case 's':
+			db.names_push_back("operator>>")
+			cs.Pos += 2
+			break
+		case 'S':
+			db.names_push_back("operator>>=")
+			cs.Pos += 2
+			break
+		}
+	} else if c0 == 'v' {
+		if (isNumberChar(c1)){
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+			t := parse_source_name(tmpPos, last, db)
+			if (!t.equals(tmpPos)) {
+				if (db.names_empty()) {
+					return cs
+				}
+				
+				s := db.names_back().first
+				db.names_back().first = "operator " + s
+				cs.Pos = t.Pos
+			}
+		}
+	}
+	
 	return cs
 }
 
@@ -939,8 +1265,8 @@ func parse_unnamed_type_name(first, last *CStyleString, db *Db) CStyleString {
 			}
 			
 			part := t1.Content[t0.Pos:t1.Pos]
-			s := db.names.back().first
-			db.names.back().first = s[:7] + part + s[7:]
+			s := db.names_back().first
+			db.names_back().first = s[:7] + part + s[7:]
 			t0.Pos = t1.Pos
 		}
 		
