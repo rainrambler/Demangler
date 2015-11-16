@@ -894,7 +894,33 @@ func parse_unscoped_name(first, last *CStyleString, db *Db) CStyleString {
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if last.calcDelta(first) < 2 {
+		return *first
+	}
+	
+	t0 := *first
+	St := false
+	if (t0.curChar() == 'S') && (t0.nextChar() == 't') {
+		t0.Pos += 2
+		St = true
+		if !t0.equals(last) && (t0.curChar() == 'L') {
+			t0.Pos++
+		}
+	}
+	
+	t1 := parse_unqualified_name(&t0, last, db)
+	if t1.equals(&t0) {
+		if St {
+			if db.names_empty() {
+				return cs
+			}
+			
+			db.names_back().first = "std::" + db.names_back().first
+		}
+		
+		cs.Pos = t1.Pos
+	}
+	
 	return cs
 }
 
