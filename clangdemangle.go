@@ -839,12 +839,53 @@ func parse_unnamed_type_name(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <ctor-dtor-name> ::= C1    # complete object constructor
+//                  ::= C2    # base object constructor
+//                  ::= C3    # complete object allocating constructor
+//   extension      ::= C5    # ?
+//                  ::= D0    # deleting destructor
+//                  ::= D1    # complete object destructor
+//                  ::= D2    # base object destructor
+//   extension      ::= D5    # ?
 func parse_ctor_dtor_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if last.calcDelta(first) < 2 {
+		return *first
+	}
+	
+	if db.names_empty() {
+		return *first
+	}
+	
+	c := cs.curChar()
+	
+	if c == 'C' {
+		nc := cs.nextChar()
+		if (nc == '1') || (nc == '2') || (nc == '3') || (nc == '5') {
+			if db.names_empty() {
+				return cs
+			}
+			
+			db.names_push_back(db.names_back().first)
+			cs.Pos += 2
+			db.parsed_ctor_dtor_cv = true
+		}
+	} else if c == 'D' {
+		nc := cs.nextChar()
+		if (nc == '0') || (nc == '1') || (nc == '2') || (nc == '5') {
+			if db.names_empty() {
+				return cs
+			}
+			
+			db.names_push_back("~" + db.names_back().first)
+			cs.Pos += 2
+			db.parsed_ctor_dtor_cv = true
+		}
+	}
+	
 	return cs
 }
 
