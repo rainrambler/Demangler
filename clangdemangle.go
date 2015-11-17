@@ -408,6 +408,38 @@ func parse_pointer_to_member_type(first, last *CStyleString, db *Db) CStyleStrin
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
+	if first.equals(last) {
+		return cs
+	}
+	
+	if cs.curChar() != 'M' {
+		return cs
+	}
+
+	t1 := &CStyleString{cs.Content, cs.Pos + 1}
+	t := parse_type(t1, last, db)
+	if !t.equals(t1) {
+		t2 := parse_type(t, last, db)
+		if !t2.equals(t) {
+			if db.names_size() < 2 {
+				return cs
+			}
+			
+			fnc := db.names_back()
+			db.names_pop_back()
+			class_type := db.names_back()
+			
+			if (len(fnc.second) > 0) && fnc.second[0] == '(' {
+				db.names_back().first = fnc.first + "(" + class_type.move_full() + "::*"
+				db.names_back().second = ")" + fnc.second
+			} else {
+				db.names_back().first = fnc.first + " " + class_type.move_full() + "::*"
+				db.names_back().second = fnc.second
+			}
+			
+			cs.Pos = t2.Pos
+		}
+	}	
 	// TODO
 	return cs
 }
