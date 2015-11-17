@@ -222,28 +222,8 @@ func demangle2(mangled string, first, last int, db *Db, status *int) {
 	
 	if mangled[first] == '_' {
 		if mangled[first + 1] == 'Z' {
-			
+			// TODO
 		}
-	}
-}
-
-func parse_special_name(mangled string, first, last int, db *Db, result *CStyleString) {
-	if (last - first) <= 2 {
-		// invalid, not parsed
-		return
-	}
-	
-	c0 := mangled[first]
-	c1 := mangled[first + 1]
-	if c0 == 'T' {
-		if c1 == 'V' {
-			// TV <type>    # virtual table
-			
-		} else if c1 == 'T' {
-			
-		}
-	} else {
-		
 	}
 }
 
@@ -454,6 +434,12 @@ func parse_decltype(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// extension:
+// <vector-type>           ::= Dv <positive dimension number> _
+//                                    <extended element type>
+//                         ::= Dv [<dimension expression>] _ <element type>
+// <extended element type> ::= <element type>
+//                         ::= p # AltiVec vector pixel
 func parse_vector_type(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
@@ -469,6 +455,106 @@ func parse_encoding(first, last *CStyleString, db *Db) CStyleString {
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
+	if first.equals(last) {
+		return cs
+	}
+	
+	su := db.encoding_depth
+	db.encoding_depth++
+	sb := db.tag_templates
+	
+	if db.encoding_depth > 1 {
+		db.tag_templates = true
+	}
+	
+	c := cs.curChar()
+	
+	if (c == 'G') || (c == 'T') {
+		tmp := parse_special_name(first, last, db)
+		return tmp
+	}
+	
+	ends_with_template_args := false
+	t := parse_name(first, last, db, &ends_with_template_args)
+	//cv1 := db.cv
+	//ref1 := db.ref
+	
+	if t.equals(first) {
+		db.encoding_depth = su // ???
+		db.tag_templates = sb
+		return cs
+	}
+	
+	c2 := t.curChar()
+	if !t.equals(last) && (c2 != 'E') && (c2 != '.') {
+		sb2 := db.tag_templates
+		db.tag_templates = false
+		
+		if db.names_empty() {
+			db.encoding_depth = su // ???
+			db.tag_templates = sb
+			return cs
+		}
+		
+		nm := db.names_back().first
+		if len(nm) == 0 {
+			db.encoding_depth = su // ???
+			db.tag_templates = sb
+			return cs
+		}
+		
+		if !db.parsed_ctor_dtor_cv && ends_with_template_args {
+			t2 := parse_type(&t, last, db)
+			
+			if t2.equals(&t) {
+				db.encoding_depth = su // ???
+				db.tag_templates = sb
+				return cs
+			}
+			
+			if db.names_size() < 2 {
+				db.encoding_depth = su // ???
+				db.tag_templates = sb
+				return cs
+			}
+			
+			ret1 := db.names_back().first
+			ret2 := db.names_back().second
+			
+			if len(ret2) == 0 {
+				ret1 += " "
+			}
+			
+			db.names_pop_back()
+			db.names_back().first = ret1 + db.names_back().first
+			t.Pos = t2.Pos
+		}
+		
+		db.names_back().first += "("
+		if !t.equals(last) && (t.curChar() == 'v') {
+			t.Pos++
+		} else {
+			//first_arg := true
+			for {
+				k0 := db.names_size()
+                t2 := parse_type(&t, last, db)
+                k1 := db.names_size()
+				
+				if t2.equals(&t) {
+					break
+				}
+				
+				if k1 > k0 {
+					// TODO
+				}
+			}
+		}
+		
+		db.tag_templates = sb2
+	}
+	
+	db.encoding_depth = su // ???
+	db.tag_templates = sb
 	// TODO
 	return cs
 }
@@ -510,7 +596,7 @@ func parse_pointer_to_member_type(first, last *CStyleString, db *Db) CStyleStrin
 			cs.Pos = t2.Pos
 		}
 	}	
-	// TODO
+
 	return cs
 }
 
@@ -566,6 +652,29 @@ func parse_template_args(first, last *CStyleString, db *Db) CStyleString {
 }
 
 func parse_source_name(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+// <special-name> ::= TV <type>    # virtual table
+//                ::= TT <type>    # VTT structure (construction vtable index)
+//                ::= TI <type>    # typeinfo structure
+//                ::= TS <type>    # typeinfo name (null-terminated byte string)
+//                ::= Tc <call-offset> <call-offset> <base encoding>
+//                    # base is the nominal target function of thunk
+//                    # first call-offset is 'this' adjustment
+//                    # second call-offset is result adjustment
+//                ::= T <call-offset> <base encoding>
+//                    # base is the nominal target function of thunk
+//                ::= GV <object name> # Guard variable for one-time initialization
+//                                     # No <type>
+//      extension ::= TC <first type> <number> _ <second type> # construction vtable for second-in-first
+//      extension ::= GR <object name> # reference temporary for object
+func parse_special_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
