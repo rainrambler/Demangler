@@ -426,9 +426,31 @@ func parse_discriminator(first, last *CStyleString) CStyleString {
 	}
 	
 	if first.curChar() == '_' {
-		
+		t1 := &CStyleString{cs.Content, cs.Pos + 1}
+		if !t1.equals(last) {
+			if isNumberChar(t1.curChar()) {
+				cs.Pos = t1.Pos + 1
+			} else if t1.curChar() == '_' {
+				t1.Pos++
+				for !t1.equals(last) && isNumberChar(t1.curChar()) {
+					t1.Pos++
+				}
+				
+				if !t1.equals(last) && t1.curChar() == '_' {
+					cs.Pos = t1.Pos + 1
+				}
+			}
+		}
+	} else if isNumberChar(cs.curChar()) {
+		t1 := &CStyleString{cs.Content, cs.Pos + 1}
+		for !t1.equals(last) && isNumberChar(t1.curChar()) {
+			t1.Pos++
+		}
+		if t1.equals(last) {
+			cs.Pos = t1.Pos
+		}
 	}
-	// TODO
+	
 	return cs
 }
 
