@@ -125,6 +125,10 @@ func (p *Db) names_empty() bool {
 	return len(p.names.content) == 0
 }
 
+func (p *Db) template_param_empty() bool {
+	return len(p.template_param.content) == 0
+}
+
 func (p *Db) subs_empty() bool {
 	return len(p.subs.content) == 0
 }
@@ -173,6 +177,15 @@ func (p *Db) subs_back() *sub_type {
 		return nil
 	}
 	return &p.subs.content[size - 1] // the last
+}
+
+// the last template_params
+func (p *Db) template_param_back() *template_param_type {
+	size := len(p.template_param.content)
+	if size == 0 {
+		return nil
+	}
+	return &p.template_param.content[size - 1] // the last
 }
 
 // the last names
@@ -234,12 +247,69 @@ func parse_special_name(mangled string, first, last int, db *Db, result *CStyleS
 	}
 }
 
+// <template-param> ::= T_    # first template parameter
+//                  ::= T <parameter-2 non-negative number> _
 func parse_template_param(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if last.calcDelta(first) < 2 {
+		return cs
+	}
+	
+	if cs.curChar() != 'T' {
+		return cs
+	}
+	
+	c := cs.nextChar()
+	if c == '_' {
+		if db.template_param_empty() {
+			return cs
+		}
+		
+		lastItem := db.template_param_back()
+		if len(lastItem.content) > 0 {
+			for _, item := range lastItem.content[0].content {
+				db.names_push_back(item.first) // ???
+			}
+			cs.Pos += 2
+		} else {
+			db.names_push_back("T_")
+			cs.Pos += 2
+			db.fix_forward_references = true
+		}
+	} else if isNumberChar(c) {
+		t := &CStyleString{cs.Content, cs.Pos + 1}
+		sub := int(t.curChar() - '0')
+		t.Pos++
+		for !t.equals(last) && isNumberChar(t.curChar()) {
+			t.Pos++
+			
+			sub *= 10
+			sub += int(t.curChar() - '0')
+		}
+		
+		if t.equals(last) || (t.curChar() != '_') ||
+		    db.template_param_empty() {
+			return cs	
+		}
+		
+		sub++
+		size := len(db.template_param_back().content)
+		if sub < size {
+			for _, item := range db.template_param_back().content[sub].content {
+				db.names_push_back(item.first) // ???
+			}
+			
+			cs.Pos = t.Pos + 1
+		} else {
+			db.names_push_back(t.Content[cs.Pos:t.Pos + 1])
+			cs.Pos = t.Pos + 1
+			db.fix_forward_references = true
+		}
+	}
+	
 	return cs
 }
 
@@ -360,7 +430,7 @@ func parse_decltype(first, last *CStyleString, db *Db) CStyleString {
 		return cs
 	}
 	
-	if first.currentChar() != 'D' {
+	if first.curChar() != 'D' {
 		return cs
 	}
 	
@@ -419,8 +489,8 @@ func parse_pointer_to_member_type(first, last *CStyleString, db *Db) CStyleStrin
 	t1 := &CStyleString{cs.Content, cs.Pos + 1}
 	t := parse_type(t1, last, db)
 	if !t.equals(t1) {
-		t2 := parse_type(t, last, db)
-		if !t2.equals(t) {
+		t2 := parse_type(&t, last, db)
+		if !t2.equals(&t) {
 			if db.names_size() < 2 {
 				return cs
 			}
