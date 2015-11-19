@@ -768,6 +768,27 @@ func parse_special_name(first, last *CStyleString, db *Db) CStyleString {
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
+	if last.Pos - first.Pos <= 2 {
+		return cs
+	}
+	
+	switch cs.curChar() {
+		case 'T':
+		switch cs.nextChar() {
+			case 'V':
+			// TV <type>    # virtual table
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+			t := parse_type(tmpPos, last, db)
+			if !t.equals(tmpPos) {
+				if (db.names_empty()) {
+					return cs
+				}  
+				db.names_back().first = "typeinfo name for " + db.names_back().first                  
+				cs.Pos = t.Pos
+				// TODO
+			}
+		}
+	}
 	// TODO
 	return cs
 }
