@@ -449,6 +449,10 @@ func parse_vector_type(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <encoding> ::= <function name> <bare-function-type>
+//            ::= <data name>
+//            ::= <special-name>
+
 // clang\cxxabi\src\cxa_demangle.cpp line 4491
 func parse_encoding(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
@@ -476,8 +480,8 @@ func parse_encoding(first, last *CStyleString, db *Db) CStyleString {
 	
 	ends_with_template_args := false
 	t := parse_name(first, last, db, &ends_with_template_args)
-	//cv1 := db.cv
-	//ref1 := db.ref
+	cv1 := db.cv
+	ref1 := db.ref
 	
 	if t.equals(first) {
 		db.encoding_depth = su // ???
@@ -489,7 +493,8 @@ func parse_encoding(first, last *CStyleString, db *Db) CStyleString {
 	if !t.equals(last) && (c2 != 'E') && (c2 != '.') {
 		sb2 := db.tag_templates
 		db.tag_templates = false
-		
+		var t2 CStyleString
+		ret2 := ""
 		if db.names_empty() {
 			db.encoding_depth = su // ???
 			db.tag_templates = sb
@@ -504,7 +509,7 @@ func parse_encoding(first, last *CStyleString, db *Db) CStyleString {
 		}
 		
 		if !db.parsed_ctor_dtor_cv && ends_with_template_args {
-			t2 := parse_type(&t, last, db)
+			t2 = parse_type(&t, last, db)
 			
 			if t2.equals(&t) {
 				db.encoding_depth = su // ???
@@ -534,7 +539,7 @@ func parse_encoding(first, last *CStyleString, db *Db) CStyleString {
 		if !t.equals(last) && (t.curChar() == 'v') {
 			t.Pos++
 		} else {
-			//first_arg := true
+			first_arg := true
 			for {
 				k0 := db.names_size()
                 t2 := parse_type(&t, last, db)
@@ -545,14 +550,66 @@ func parse_encoding(first, last *CStyleString, db *Db) CStyleString {
 				}
 				
 				if k1 > k0 {
-					// TODO
+					tmp := ""
+					for k := k0; k < k1; k++ {
+						if len(tmp) > 0 {
+							tmp += ", "
+						}
+						
+						tmp += db.names.content[k].move_full()
+					}
+					for k := k0; k < k1; k++ {
+						db.names_pop_back()
+					}
+					
+					if len(tmp) > 0 {
+						if db.names_empty() {
+							return cs
+						}
+						if !first_arg {
+							db.names_back().first += ", "
+						} else {
+							first_arg = false
+						}
+						db.names_back().first += tmp
+					}
 				}
+				
+				t.Pos = t2.Pos
 			}
 		}
 		
+		if db.names_empty() {
+			return cs
+		}
+		
+		db.names_back().first += ")"
+		if (cv1 & 1) != 0 {
+			db.names_back().first += " const"
+		}
+            
+        if (cv1 & 2) != 0 {
+			db.names_back().first += " volatile"
+		}
+         if (cv1 & 4) != 0 {
+			db.names_back().first += " restrict"
+		}
+                        
+        if (ref1 == 1) {
+			db.names_back().first += " &"
+		} else if (ref1 == 2) {
+			db.names_back().first += " &&"
+		}
+                        
+        db.names_back().first += ret2
 		db.tag_templates = sb2
+		cs.Pos = t.Pos
+	} else {
+		cs.Pos = t.Pos
 	}
 	
+	db.cv = cv1
+	db.ref = ref1
 	db.encoding_depth = su // ???
 	db.tag_templates = sb
 	// TODO
