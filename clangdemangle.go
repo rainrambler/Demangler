@@ -708,12 +708,44 @@ func parse_template_args(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <source-name> ::= <positive length number> <identifier>
+// line 225
 func parse_source_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if first.equals(last) {
+		return cs
+	}
+	
+	c := cs.curChar()
+	if isNumberChar(c) && !first.isNext(last) {
+		t := &CStyleString{cs.Content, cs.Pos + 1}
+		n := int(c - '0')
+		c := t.curChar()
+		for isNumberChar(c) {
+			n = (n * 10) + int(c - '0')
+			t.Pos++
+			if t.equals(last) {
+				return cs
+			}
+			c = cs.curChar()
+		}
+		
+		if (last.Pos - t.Pos) >= n {
+			r := t.Content[:n]
+			
+			if r[:10] == "_GLOBAL__N" {
+				db.names_push_back("(anonymous namespace)")
+			} else {
+				db.names_push_back(r)
+			}
+			
+			cs.Pos = t.Pos + n
+		}
+	}
+
 	return cs
 }
 
