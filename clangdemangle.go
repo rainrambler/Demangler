@@ -847,6 +847,13 @@ func parse_template_arg(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <expr-primary> ::= L <type> <value number> E                          # integer literal
+//                ::= L <type> <value float> E                           # floating literal
+//                ::= L <string type> E                                  # string literal
+//                ::= L <nullptr type> E                                 # nullptr literal (i.e., "LDnE")
+//                ::= L <type> <real-part float> _ <imag-part float> E   # complex floating point literal (C 2000)
+//                ::= L <mangled-name> E     
+// line 2664
 func parse_expr_primary(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
@@ -856,12 +863,45 @@ func parse_expr_primary(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <call-offset> ::= h <nv-offset> _
+//               ::= v <v-offset> _
+// 
+// <nv-offset> ::= <offset number>
+//               # non-virtual base override
+// 
+// <v-offset>  ::= <offset number> _ <virtual offset number>
+//               # virtual base override, with vcall offset
+// line 4265
 func parse_call_offset(first, last *CStyleString) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if first.equals(last) {
+		return cs
+	}
+	
+	switch cs.curChar() {
+		case 'h':
+		tmpPos := &CStyleString{cs.Content, cs.Pos + 1}
+		t := parse_number(tmpPos, last)
+		if t.notEach(tmpPos, last) && (t.curChar() == '_') {
+			cs.Pos = t.Pos + 1
+		}
+		break
+		case 'v':
+		tmpPos := &CStyleString{cs.Content, cs.Pos + 1}
+		t := parse_number(tmpPos, last)
+		if t.notEach(tmpPos, last) && (t.curChar() == '_') {
+			t.Pos++
+			t2 := parse_number(&t, last)
+			if t2.notEach(tmpPos, last) && (t2.curChar() == '_') {
+				cs.Pos = t2.Pos + 1
+			}
+		}
+		break
+	}
+	
 	return cs
 }
 
