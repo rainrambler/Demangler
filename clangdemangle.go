@@ -788,7 +788,66 @@ func parse_template_args(first, last *CStyleString, db *Db) CStyleString {
 //                ::= <expr-primary>                                     # simple expressions
 //                ::= J <template-arg>* E                                # argument pack
 //                ::= LZ <encoding> E
+// line 3795
 func parse_template_arg(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	if first.equals(last) {
+		return cs
+	}
+	
+	switch first.curChar() {
+		case 'X':
+		tmpPos := &CStyleString{cs.Content, cs.Pos + 1}
+		t := parse_expression(tmpPos, last, db)
+		if !t.equals(tmpPos) {
+			if !t.equals(last) && (t.curChar() == 'E') {
+				cs.Pos = t.Pos + 1
+			}
+		}
+		break
+		case 'J':
+		t := &CStyleString{cs.Content, cs.Pos + 1}
+		
+		if t.equals(last) {
+			return cs
+		}
+		
+		for t.curChar() != 'E' {
+			t1 := parse_template_arg(t, last, db)
+			if t1.equals(t) {
+				return cs
+			}
+			
+			t.Pos = t1.Pos
+		}
+		cs.Pos = t.Pos + 1
+        break
+		case 'L':
+        // <expr-primary> or LZ <encoding> E
+		tmpPos := &CStyleString{cs.Content, cs.Pos + 1}
+		if !tmpPos.equals(last) && (tmpPos.curChar() == 'Z') {
+			tmpPos.Pos += 1
+			t := parse_encoding(tmpPos, last, db)
+			if t.notEach(tmpPos, last) && (t.curChar() == 'E') {
+				cs.Pos = t.Pos + 1
+			}
+		} else {
+			cs = parse_expr_primary(first, last, db)
+		}
+		break
+		default:
+		// <type>
+        cs = parse_type(first, last, db)
+		break
+	}
+	
+	return cs
+}
+
+func parse_expr_primary(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
@@ -1059,6 +1118,8 @@ func parse_number(first, last *CStyleString) CStyleString {
 	return cs
 }
 
+// <array-type> ::= A <positive dimension number> _ <element type>
+//              ::= A [<dimension expression>] _ <element type>
 func parse_array_type(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
@@ -2124,6 +2185,37 @@ func parse_substitution(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <builtin-type> ::= v    # void
+//                ::= w    # wchar_t
+//                ::= b    # bool
+//                ::= c    # char
+//                ::= a    # signed char
+//                ::= h    # unsigned char
+//                ::= s    # short
+//                ::= t    # unsigned short
+//                ::= i    # int
+//                ::= j    # unsigned int
+//                ::= l    # long
+//                ::= m    # unsigned long
+//                ::= x    # long long, __int64
+//                ::= y    # unsigned long long, __int64
+//                ::= n    # __int128
+//                ::= o    # unsigned __int128
+//                ::= f    # float
+//                ::= d    # double
+//                ::= e    # long double, __float80
+//                ::= g    # __float128
+//                ::= z    # ellipsis
+//                ::= Dd   # IEEE 754r decimal floating point (64 bits)
+//                ::= De   # IEEE 754r decimal floating point (128 bits)
+//                ::= Df   # IEEE 754r decimal floating point (32 bits)
+//                ::= Dh   # IEEE 754r half-precision floating point (16 bits)
+//                ::= Di   # char32_t
+//                ::= Ds   # char16_t
+//                ::= Da   # auto (in dependent new-expressions)
+//                ::= Dc   # decltype(auto)
+//                ::= Dn   # std::nullptr_t (i.e., decltype(nullptr))
+//                ::= u <source-name>    # vendor extended type
 func parse_builtin_type(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
