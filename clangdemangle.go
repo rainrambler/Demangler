@@ -2356,6 +2356,46 @@ func parse_builtin_type(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <expression> ::= <unary operator-name> <expression>
+//              ::= <binary operator-name> <expression> <expression>
+//              ::= <ternary operator-name> <expression> <expression> <expression>
+//              ::= cl <expression>+ E                                   # call
+//              ::= cv <type> <expression>                               # conversion with one argument
+//              ::= cv <type> _ <expression>* E                          # conversion with a different number of arguments
+//              ::= [gs] nw <expression>* _ <type> E                     # new (expr-list) type
+//              ::= [gs] nw <expression>* _ <type> <initializer>         # new (expr-list) type (init)
+//              ::= [gs] na <expression>* _ <type> E                     # new[] (expr-list) type
+//              ::= [gs] na <expression>* _ <type> <initializer>         # new[] (expr-list) type (init)
+//              ::= [gs] dl <expression>                                 # delete expression
+//              ::= [gs] da <expression>                                 # delete[] expression
+//              ::= pp_ <expression>                                     # prefix ++
+//              ::= mm_ <expression>                                     # prefix --
+//              ::= ti <type>                                            # typeid (type)
+//              ::= te <expression>                                      # typeid (expression)
+//              ::= dc <type> <expression>                               # dynamic_cast<type> (expression)
+//              ::= sc <type> <expression>                               # static_cast<type> (expression)
+//              ::= cc <type> <expression>                               # const_cast<type> (expression)
+//              ::= rc <type> <expression>                               # reinterpret_cast<type> (expression)
+//              ::= st <type>                                            # sizeof (a type)
+//              ::= sz <expression>                                      # sizeof (an expression)
+//              ::= at <type>                                            # alignof (a type)
+//              ::= az <expression>                                      # alignof (an expression)
+//              ::= nx <expression>                                      # noexcept (expression)
+//              ::= <template-param>
+//              ::= <function-param>
+//              ::= dt <expression> <unresolved-name>                    # expr.name
+//              ::= pt <expression> <unresolved-name>                    # expr->name
+//              ::= ds <expression> <expression>                         # expr.*expr
+//              ::= sZ <template-param>                                  # size of a parameter pack
+//              ::= sZ <function-param>                                  # size of a function parameter pack
+//              ::= sp <expression>                                      # pack expansion
+//              ::= tw <expression>                                      # throw expression
+//              ::= tr                                                   # throw with no operand (rethrow)
+//              ::= <unresolved-name>                                    # f(p), N::f(p), ::f(p),
+//                                                                       # freestanding dependent name (e.g., T::x),
+//                                                                       # objectless nonstatic member reference
+//              ::= <expr-primary>
+// line 3299
 func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
@@ -2366,9 +2406,116 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 		return cs
 	}
 	
-	//t := first
+	var t CStyleString
+	t.Content = first.Content
+	t.Pos = first.Pos
+	
 	//parsed_gs := false
 	
+	if (last.calcDelta(first) >= 4) &&
+	    (t.curChar() == 'g') && 
+		(t.nextChar() == 's') {
+		t.Pos += 2
+		parsed_gs = true	
+	}
+	
+	switch (t.curChar()) {
+		case 'L':
+        cs = parse_expr_primary(first, last, db)
+        break
+        case 'T':
+        cs = parse_template_param(first, last, db)
+        break
+        case 'f':
+        cs = parse_function_param(first, last, db)
+        break
+		case 'a':
+		tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+		switch t.nextChar() {
+			case 'a':
+			t = parse_binary_expression(tmpPos, last, "&&", db)
+            if (!t.equals(tmpPos)) {
+				cs.Pos = t.Pos
+			}            
+            break
+			case 'd':
+			t = parse_prefix_expression(tmpPos, last, "&", db)
+            if (!t.equals(tmpPos)) {
+				cs.Pos = t.Pos
+			}            
+            break
+			case 'n':
+			t = parse_binary_expression(tmpPos, last, "&", db)
+            if (!t.equals(tmpPos)) {
+				cs.Pos = t.Pos
+			}            
+            break
+			case 'N':
+			t = parse_binary_expression(tmpPos, last, "&=", db)
+            if (!t.equals(tmpPos)) {
+				cs.Pos = t.Pos
+			}            
+            break
+			case 'S':
+			t = parse_binary_expression(tmpPos, last, "=", db)
+            if (!t.equals(tmpPos)) {
+				cs.Pos = t.Pos
+			}            
+            break
+			case 't':
+			cs = parse_alignof_type(first, last, db)
+			break
+			case 'z':
+            cs = parse_alignof_expr(first, last, db)
+            break
+			// TODO
+		}
+	}
+	
+	// TODO
+	return cs
+}
+
+func parse_function_param(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_prefix_expression(first, last *CStyleString, op string, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_binary_expression(first, last *CStyleString, op string, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_alignof_type(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_alignof_expr(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
 	
 	// TODO
 	return cs
