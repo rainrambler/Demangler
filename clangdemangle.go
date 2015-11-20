@@ -708,6 +708,15 @@ func parse_template_args(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+func parse_call_offset(first, last *CStyleString) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
 // <source-name> ::= <positive length number> <identifier>
 // line 225
 func parse_source_name(first, last *CStyleString, db *Db) CStyleString {
@@ -784,12 +793,151 @@ func parse_special_name(first, last *CStyleString, db *Db) CStyleString {
 					return cs
 				}  
 				db.names_back().first = "typeinfo name for " + db.names_back().first                  
-				cs.Pos = t.Pos
-				// TODO
+				cs.Pos = t.Pos				
 			}
+			break
+			case 'T':
+			// TT <type>    # VTT structure (construction vtable index)
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+			t := parse_type(tmpPos, last, db)
+			if !t.equals(tmpPos) {
+				if (db.names_empty()) {
+					return cs
+				}  
+				db.names_back().first = "VTT for " + db.names_back().first                  
+				cs.Pos = t.Pos				
+			}
+			break
+			case 'I':
+			// TI <type>    # typeinfo structure
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+			t := parse_type(tmpPos, last, db)
+			if !t.equals(tmpPos) {
+				if (db.names_empty()) {
+					return cs
+				}  
+				db.names_back().first = "typeinfo for " + db.names_back().first                  
+				cs.Pos = t.Pos				
+			}
+			break
+			case 'S':
+			// TS <type>    # typeinfo name (null-terminated byte string)
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+			t := parse_type(tmpPos, last, db)
+			if !t.equals(tmpPos) {
+				if (db.names_empty()) {
+					return cs
+				}  
+				db.names_back().first = "typeinfo name for " + db.names_back().first                  
+				cs.Pos = t.Pos				
+			}
+			break
+			case 'c':
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+			t0 := parse_call_offset(tmpPos, last)
+			if t0.equals(tmpPos) {
+				break
+			}
+			
+			t1 := parse_call_offset(&t0, last)
+			if t0.equals(&t1) {
+				break
+			}
+			
+			t := parse_encoding(&t1, last, db)
+			if t.equals(&t1) {
+				if (db.names_empty()) {
+					return cs
+				}
+                
+				db.names_back().first = "covariant return thunk to " +
+				    db.names_back().first
+				cs.Pos = t.Pos
+			}
+			break
+			case 'C':
+            // extension ::= TC <first type> <number> _ <second type> # construction vtable for second-in-first
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+			t := parse_type(tmpPos, last, db)
+			if !t.equals(tmpPos) {
+				t0 := parse_number(&t, last)
+				if t0.notEach(&t, last) && (t0.curChar() == '_') {
+					t0.Pos++
+					t1 := parse_type(&t0, last, db)
+					
+					if !t1.equals(&t0) {
+						if (db.names_size() < 2) {
+							return cs
+						}
+						
+						left := db.names_back().move_full()
+                        db.names_pop_back()
+						db.names_back().first = "construction vtable for " +
+                            (left) + "-in-" +
+                            db.names_back().move_full()
+						cs.Pos = t1.Pos
+					}	
+				}
+			}
+			break
+			default:
+			// T <call-offset> <base encoding>
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 1}
+			t0 := parse_call_offset(tmpPos, last)
+			if t0.equals(tmpPos) {
+				break
+			}
+			t := parse_encoding(&t0, last, db)
+			if !t.equals(&t0) {
+				if db.names_empty() {
+					return cs
+				}
+				
+				if cs.nextChar() == 'v' {
+					db.names_back().first = "virtual thunk to " +
+					    db.names_back().first
+					cs.Pos = t.Pos
+				} else {
+					db.names_back().first = "non-virtual thunk to " +
+					    db.names_back().first
+					cs.Pos = t.Pos
+				}
+			}
+			break
 		}
+		break
+		case 'G':
+        switch cs.nextChar() {
+			case 'V':
+			// GV <object name> # Guard variable for one-time initialization
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+			t := parse_name(tmpPos, last, db, nil)
+			if !t.equals(tmpPos) {
+				if (db.names_empty()) {
+					return cs
+				}
+				db.names_back().first = "guard variable for " +
+					db.names_back().first
+			    cs.Pos = t.Pos
+			}
+			break
+			case 'R':
+            // extension ::= GR <object name> # reference temporary for object
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+			t := parse_name(tmpPos, last, db, nil)
+			if !t.equals(tmpPos) {
+				if (db.names_empty()) {
+					return cs
+				}
+				db.names_back().first = "reference temporary for " +
+					db.names_back().first
+			    cs.Pos = t.Pos
+			}
+			break
+		}
+		break
 	}
-	// TODO
+	
 	return cs
 }
 
