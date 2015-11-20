@@ -188,6 +188,26 @@ func (p *Db) template_param_back() *template_param_type {
 	return &p.template_param.content[size - 1] // the last
 }
 
+// the last sub_type
+func (p *Db) template_param_back_back() *sub_type {
+	size := len(p.template_param.content)
+	if size == 0 {
+		return nil
+	}
+	tpt := &p.template_param.content[size - 1] // the last
+	
+	size = len(tpt.content)
+	return &tpt.content[size - 1]
+}
+
+func (p *Db) template_param_pop_back() {
+	size := len(p.template_param.content)
+	if size == 0 {
+		return
+	}
+	p.template_param.content = p.template_param.content[:size - 1]
+}
+
 // the last names
 func (p *Db) names_back() *string_pair {
 	size := len(p.names.content)
@@ -699,7 +719,86 @@ func parse_discriminator(first, last *CStyleString) CStyleString {
 	return cs
 }
 
+// <template-args> ::= I <template-arg>* E
+//     extension, the abi says <template-arg>+
+// line 3848
 func parse_template_args(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	if last.calcDelta(first) < 2 {
+		return cs
+	}
+	
+	if first.curChar() != 'I' {
+		return cs		
+	}
+	
+	if db.tag_templates {
+		db.template_param_back().content = []sub_type{} // clear		
+	}
+	
+	t := &CStyleString{cs.Content, cs.Pos + 1}
+	args := "<"
+	for t.curChar() != 'E' {
+		if db.tag_templates {
+			//db.template_param ???
+			// db.template_param.emplace_back(db.names.get_allocator());
+			
+		}
+		
+		k0 := db.names_size()
+		t1 := parse_template_arg(t, last, db)
+		k1 := db.names_size()
+		
+		if db.tag_templates {
+			db.template_param_pop_back()
+		}
+		
+		if t1.equals(t) || t1.equals(last) {
+			return cs
+		}
+		
+		if db.tag_templates {
+			for k := k0; k < k1; k++ {
+				db.template_param_back_back().push_back(db.names.content[k])
+			}
+		}
+		
+		for k := k0; k < k1; k++ {
+			if len(args) > 1 {
+				args += ", "
+			}
+			args += db.names.content[k].move_full()
+		}
+		
+		for k1 != k0 {
+			db.names_pop_back()
+			k1--
+		}
+		
+		t.Pos = t1.Pos
+	}
+	
+	cs.Pos = t.Pos + 1
+	if args[len(args) - 1] != '>' {
+		args += ">"
+	} else {
+		args += " >"
+	}
+	
+	db.names_push_back(args)
+	
+	return cs
+}
+
+// <template-arg> ::= <type>                                             # type or template
+//                ::= X <expression> E                                   # expression
+//                ::= <expr-primary>                                     # simple expressions
+//                ::= J <template-arg>* E                                # argument pack
+//                ::= LZ <encoding> E
+func parse_template_arg(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
