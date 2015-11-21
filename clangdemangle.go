@@ -68,6 +68,10 @@ func (p *CStyleString) curChar() byte {
 	return p.Content[p.Pos]
 }
 
+func (p *CStyleString) prefix(size int) string {
+	return p.Content[p.Pos:(p.Pos + size)]
+}
+
 func (p *CStyleString) nextChar() byte {
 	return p.Content[p.Pos + 1]
 }
@@ -3419,7 +3423,70 @@ func parse_simple_id(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <base-unresolved-name> ::= <simple-id>                                # unresolved name
+//          extension     ::= <operator-name>                            # unresolved operator-function-id
+//          extension     ::= <operator-name> <template-args>            # unresolved operator template-id
+//                        ::= on <operator-name>                         # unresolved operator-function-id
+//                        ::= on <operator-name> <template-args>         # unresolved operator template-id
+//                        ::= dn <destructor-name>                       # destructor or pseudo-destructor;
+//     
+
+// line 1055
 func parse_base_unresolved_name(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	if last.calcDelta(first) < 2 {
+		return cs
+	}
+	
+	s := cs.prefix(2)
+	if (s == "on") || (s == "dn") {
+		tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+		if s[0] == 'o' {			
+			t := parse_operator_name(tmpPos, last, db)
+			if !t.equals(tmpPos) {
+				cs = parse_template_args(t, last, db)
+				if !cs.equals(t) {
+					if db.names_size() < 2 {
+						return cs
+					}
+					args := db.names_back().move_full()
+                    db.names_pop_back()
+                    db.names_back().first += (args)
+				}
+			}
+		} else {
+			t := parse_destructor_name(tmpPos, last, db)
+			if !t.equals(tmpPos) {
+				cs.Pos = t.Pos
+			}
+		}
+	} else {
+		t := parse_simple_id(first, last, db)
+		if t.equals(first) {
+			t = parse_operator_name(first, last, db)
+			if !t.equals(first) {
+				cs = parse_template_args(t, last, db)
+				if !cs.equals(t) {
+					if db.names_size() < 2 {
+						return cs
+					}
+					args := db.names_back().move_full()
+                    db.names_pop_back()
+                    db.names_back().first += (args)
+				}
+			}
+		} else {
+			cs.Pos = t.Pos
+		}
+	}
+	
+	return cs
+}
+
+func parse_destructor_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
