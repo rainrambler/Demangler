@@ -2988,7 +2988,31 @@ func parse_binary_expression(first, last *CStyleString, op string, db *Db) CStyl
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	t1 := parse_expression(first, last, db)
+	if !t1.equals(first) {
+		t2 := parse_expression(&t1, last, db)
+		if !t2.equals(&t1) {
+			if (db.names_size() < 2) {
+				return cs
+			}
+			
+			op2 := db.names_back().move_full()
+	        db.names_pop_back()
+	        op1 := db.names_back().move_full()
+			db.names_back().first = ""
+			if (op == ">") {
+				db.names_back().first += "("
+			}
+			db.names_back().first += "(" + op1 + ") " + op + " (" + op2 + ")"
+	        if (op == ">") {
+				db.names_back().first += ")"
+			}
+			
+			cs.Pos = t2.Pos
+		}	
+	} else {
+		db.names_pop_back()
+	}
 	return cs
 }
 
