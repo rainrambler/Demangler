@@ -3387,7 +3387,12 @@ func parse_unresolved_name(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <unresolved-qualifier-level> ::= <simple-id>
 func parse_unresolved_qualifier_level(first, last *CStyleString, db *Db) CStyleString {
+	return parse_simple_id(first, last, db)
+}
+
+func parse_simple_id(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
