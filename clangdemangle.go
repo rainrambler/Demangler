@@ -2901,7 +2901,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
 			switch t.nextChar() {
 				case 'c':
-				cs = parse_reinterpret_cast_expr(first, last, db)
+				cs = *parse_reinterpret_cast_expr(first, last, db)
 				break
 				case 'm':
 				t = parse_binary_expression(tmpPos, last, "%", db)
@@ -3080,12 +3080,37 @@ func parse_arrow_expr(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
-func parse_reinterpret_cast_expr(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+// rc <type> <expression>       # reinterpret_cast<type> (expression)
+func parse_reinterpret_cast_expr(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
 	
-	// TODO
+	if first.prefix(2) != "rc" {
+		return cs
+	}
+
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_type(tmpPos, last, db)
+	
+	if !t.equals(tmpPos) {
+		t1 := parse_expression(&t, last, db)
+		
+		if !t1.equals(&t) {
+			if db.names_size() < 2 {
+				return cs
+			}
+			
+			expr := db.names_back().move_full()
+            db.names_pop_back()
+            db.names_back().first = "reinterpret_cast<" + 
+			    db.names_back().move_full() + ">(" + expr + ")"
+			cs.Pos = t1.Pos
+		}
+	}
+	
 	return cs
 }
 
