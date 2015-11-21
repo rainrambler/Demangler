@@ -867,10 +867,17 @@ func parse_expr_primary(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
-func parse_new_expr(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+// [gs] nw <expression>* _ <type> E                     # new (expr-list) type
+// [gs] nw <expression>* _ <type> <initializer>         # new (expr-list) type (init)
+// [gs] na <expression>* _ <type> E                     # new[] (expr-list) type
+// [gs] na <expression>* _ <type> <initializer>         # new[] (expr-list) type (init)
+// <initializer> ::= pi <expression>* E                 # parenthesized initialization
+func parse_new_expr(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) < 4 {
+		return cs
+	}
 	
 	// TODO
 	return cs
@@ -2751,7 +2758,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
 			switch t.nextChar() {
 				case 'a', 'w':
-				cs = parse_new_expr(first, last, db)
+				cs = *parse_new_expr(first, last, db)
 				break
 				case 'e':
 				t = parse_binary_expression(tmpPos, last, "!=", db)
