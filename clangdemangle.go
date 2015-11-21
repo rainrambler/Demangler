@@ -2979,7 +2979,15 @@ func parse_prefix_expression(first, last *CStyleString, op string, db *Db) CStyl
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	t1 := parse_expression(first, last, db)
+	if !t1.equals(first) {
+		if (db.names_empty()) {
+			return cs
+		}
+		
+		db.names_back().first =  op + "(" + db.names_back().move_full() + ")"
+        cs.Pos = t1.Pos
+	}
 	return cs
 }
 
