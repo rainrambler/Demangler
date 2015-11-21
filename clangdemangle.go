@@ -3545,12 +3545,36 @@ func parse_dot_star_expr(first, last *CStyleString, db *Db) *CStyleString {
 	return cs
 }
 
-func parse_dot_expr(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+// dt <expression> <unresolved-name>                    # expr.name
+func parse_dot_expr(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
 	
-	// TODO
+	if first.prefix(2) != "dt" {
+		return cs
+	}
+
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_expression(tmpPos, last, db)
+	
+	if !t.equals(tmpPos) {
+		t1 := parse_unresolved_name(&t, last, db)
+		
+		if !t1.equals(&t) {
+			if db.names_size() < 2 {
+				return cs
+			}
+			
+			nm := db.names_back().move_full()
+            db.names_pop_back()
+            db.names_back().first += "." + (nm)
+			cs.Pos = t1.Pos
+		}
+	}
+	
 	return cs
 }
 
