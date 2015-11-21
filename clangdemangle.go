@@ -3196,16 +3196,42 @@ func parsed_gs(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// dc <type> <expression>                               # dynamic_cast<type> (expression)
 func parse_dynamic_cast_expr(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
+	
+	if (first.curChar() != 'd') || (first.nextChar() != 'c') {
+		return cs
+	}
+	
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_type(tmpPos, last, db)
+	
+	if !t.equals(tmpPos) {
+		t1 := parse_expression(t, last, db)
+		if !t1.equals(t) {
+			if (db.names_size() < 2) {
+				return cs
+			}
+			
+			expr = db.names_back().move_full()
+            db.names_pop_back()
+            db.names_back().first = "dynamic_cast<" +
+			    db.names_back().move_full() + ">(" + expr + ")"
+            cs.Pos = t1.Pos
+		}
+	}
+	
 	return cs
 }
 
-// at <type>                                            # alignof (a type)
+// at <type>      # alignof (a type)
 // line 3161
 func parse_alignof_type(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
