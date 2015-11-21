@@ -2966,7 +2966,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 				cs.Pos += 2
 				break
 				case 'w':
-				cs = parse_throw_expr(first, last, db)
+				cs = *parse_throw_expr(first, last, db)
 				break
 			}
 		}
@@ -3145,12 +3145,28 @@ func parse_typeid_expr(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
-func parse_throw_expr(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+func parse_throw_expr(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
 	
-	// TODO
+	if first.prefix(2) != "tw" {
+		return cs
+	}
+
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_expression(tmpPos, last, db)
+	
+	if !t.equals(tmpPos) {
+		if db.names_empty() {
+			return cs
+		}
+        db.names_back().first = "throw " + db.names_back().move_full()
+		cs.Pos = t.Pos
+	}
+	
 	return cs
 }
 
