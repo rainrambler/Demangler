@@ -3178,21 +3178,83 @@ func parse_dot_expr(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// cv <type> <expression>                               # conversion with one argument
+// cv <type> _ <expression>* E                          # conversion with a different number of arguments
 func parse_conversion_expr(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
-	return cs
-}
-
-func parsed_gs(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
 	
-	// TODO
+	if (first.curChar() != 'c') || (first.nextChar() != 'v') {
+		return cs
+	}
+	
+	try_to_parse_template_args := db.try_to_parse_template_args
+    db.try_to_parse_template_args = false
+	
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_type(tmpPos, last, db)
+	db.try_to_parse_template_args = try_to_parse_template_args
+	
+	if t.notEach(tmpPos, last) {
+		if t.curChar() != '_' {
+			t1 := parse_expression(&t, last, db)
+			if t1.equals(&t) {
+				return cs
+			}
+			t.Pos = t1.Pos
+		} else {
+			t.Pos++
+			if t.equals(last) {
+				return cs
+			}
+			
+			if (t.curChar() == 'E') {
+				// db.names.emplace_back();
+				
+			} else {
+				first_expr := true
+				for t.curChar() != 'E' {
+					t1 := parse_expression(&t, last, db)
+					if !t1.notEach(&t, last) {
+						return cs
+					}
+					if !first_expr {
+						if (db.names_empty()) {
+							return cs
+						}
+						
+						tmp := db.names_back().move_full()
+						db.names_pop_back()
+						if len(tmp) > 0 {
+							if (db.names_empty()) {
+								return cs
+							}
+							db.names_back().first += ", "
+							db.names_back().first += tmp
+							first_expr = false
+						}
+					}
+					
+					t.Pos = t1.Pos
+				}
+			}
+			t.Pos++
+		}
+		
+		if (db.names_size() < 2) {
+			return cs
+		}
+		
+		tmp := db.names_back().move_full()
+        db.names_pop_back()
+        db.names_back().first = "(" + db.names_back().move_full() + ")(" + tmp + ")"
+        cs.Pos = t.Pos
+	}
 	return cs
 }
 
@@ -3214,13 +3276,13 @@ func parse_dynamic_cast_expr(first, last *CStyleString, db *Db) CStyleString {
 	t := parse_type(tmpPos, last, db)
 	
 	if !t.equals(tmpPos) {
-		t1 := parse_expression(t, last, db)
-		if !t1.equals(t) {
+		t1 := parse_expression(&t, last, db)
+		if !t1.equals(&t) {
 			if (db.names_size() < 2) {
 				return cs
 			}
 			
-			expr = db.names_back().move_full()
+			expr := db.names_back().move_full()
             db.names_pop_back()
             db.names_back().first = "dynamic_cast<" +
 			    db.names_back().move_full() + ">(" + expr + ")"
