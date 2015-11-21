@@ -3397,7 +3397,25 @@ func parse_simple_id(first, last *CStyleString, db *Db) CStyleString {
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if first.equals(last) {
+		return cs
+	}
+	t := parse_source_name(first, last, db)
+	if !t.equals(first) {
+		t1 := parse_template_args(t, last, db)
+		if !t1.equals(t) {
+			if (db.names_size() < 2) {
+				return cs
+			}
+			args := db.names_back().move_full()
+            db.names_pop_back()
+            db.names_back().first += (args)
+		}
+		cs.Pos = t1.Pos
+	} else {
+		cs.Pos = t.Pos
+	}
+	
 	return cs
 }
 
