@@ -3154,12 +3154,32 @@ func parse_dynamic_cast_expr(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// at <type>                                            # alignof (a type)
+// line 3161
 func parse_alignof_type(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
+	
+	if (first.curChar() != 'a') || (first.nextChar() != 't') {
+		return cs
+	}
+	
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_type(tmpPos, last, db)
+	if !t.equals(tmpPos) {
+		if (db.names_empty()) {
+			return cs
+		}
+		
+		db.names_back().first = "alignof (" + db.names_back().move_full() + ")"
+        cs.Pos = t.Pos
+	}
+	
 	return cs
 }
 
