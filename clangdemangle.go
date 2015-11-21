@@ -3486,12 +3486,29 @@ func parse_base_unresolved_name(first, last *CStyleString, db *Db) CStyleString 
 	return cs
 }
 
+// <destructor-name> ::= <unresolved-type>                               # e.g., ~T or ~decltype(f())
+//                   ::= <simple-id>  
 func parse_destructor_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if first.equals(last) {
+		return cs
+	}
+	
+	t := parse_unresolved_type(first, last, db)
+	if t.equals(first) {
+		t = parse_simple_id(first, last, db)
+	}
+	if !t.equals(first) {
+		if db.names_empty() {
+			return cs
+		}
+		db.names_back().first = "~" + db.names_back().first
+		cs.Pos = t.Pos
+	}
+	
 	return cs
 }
 
