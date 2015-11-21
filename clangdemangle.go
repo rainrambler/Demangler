@@ -2944,7 +2944,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 						t.Pos += 2
 						switch t.curChar() {
 						case 'T':
-							cs = parse_sizeof_param_pack_expr(first, last, db)
+							cs = *parse_sizeof_param_pack_expr(first, last, db)
                         	break
                     	case 'f':
                         	cs = *parse_sizeof_function_param_pack_expr(first, last, db)
@@ -3118,12 +3118,43 @@ func parse_sizeof_expr_expr(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
-func parse_sizeof_param_pack_expr(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+// sZ <template-param>                                  # size of a parameter pack
+func parse_sizeof_param_pack_expr(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
 	
-	// TODO
+	if first.prefix(3) != "sZT"{
+		return cs
+	}
+	
+	k0 := db.names_size()
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_template_param(tmpPos, last, db)
+	k1 := db.names_size()
+
+	if !t.equals(tmpPos) {
+		tmp := "sizeof...("
+		k := k0
+		if k != k1 {
+			tmp += db.names.content[k].move_full()
+			k++
+			for k != k1 {
+				tmp += ", " + db.names.content[k].move_full()
+				k++
+			}
+		}
+		tmp += ")"
+		for k1 != k0 {
+			db.names_pop_back()
+			k1--
+		}
+		db.names_push_back(tmp)
+		cs.Pos = t.Pos
+	}
+	
 	return cs
 }
 
