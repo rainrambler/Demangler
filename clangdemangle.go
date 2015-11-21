@@ -2243,6 +2243,15 @@ func parse_substitution(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+func parse_unresolved_type(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
 // <builtin-type> ::= v    # void
 //                ::= w    # wchar_t
 //                ::= b    # bool
@@ -3212,7 +3221,182 @@ func parse_call_expr(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <unresolved-name>
+//  extension        ::= srN <unresolved-type> [<template-args>] <unresolved-qualifier-level>* E <base-unresolved-name>
+//                   ::= [gs] <base-unresolved-name>                     # x or (with "gs") ::x
+//                   ::= [gs] sr <unresolved-qualifier-level>+ E <base-unresolved-name>  
+//                                                                       # A::x, N::y, A<T>::z; "gs" means leading "::"
+//                   ::= sr <unresolved-type> <base-unresolved-name>     # T::x / decltype(p)::x
+//  extension        ::= sr <unresolved-type> <template-args> <base-unresolved-name>
+//                                                                       # T::N::x /decltype(p)::N::x
+//  (ignored)        ::= srN <unresolved-type>  <unresolved-qualifier-level>+ E <base-unresolved-name>
+
+// line 1131
 func parse_unresolved_name(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	if last.calcDelta(first) <= 2 {
+		return cs
+	}
+	
+	t := &CStyleString{cs.Content, cs.Pos}
+	global := false
+	if (t.curChar() == 'g') && (t.nextChar() == 's') {
+		global = true
+		t.Pos += 2
+	}
+	
+	t2 := parse_base_unresolved_name(t, last, db)
+	if !t2.equals(t) {
+		if global {
+			if db.names_empty() {
+				return cs
+			}
+			
+			db.names_back().first = "::" + db.names_back().first
+		}
+		
+		cs.Pos = t2.Pos
+	} else if (last.calcDelta(t) > 2) && (t.Content[t.Pos:t.Pos + 2] == "sr") {
+		t.Pos += 2
+		if t.curChar() == 'N' {
+			t.Pos++
+			t1 := parse_unresolved_type(t, last, db)
+			if !t1.notEach(t, last) {
+				return cs
+			}
+			
+			t.Pos = t1.Pos
+            t1 = parse_template_args(t, last, db)
+			if !t1.equals(t) {
+				if (db.names_size() < 2) {
+					return cs
+				}
+				args := db.names_back().move_full()
+                db.names_pop_back()
+                db.names_back().first += (args)
+                t.Pos = t1.Pos
+                if t.equals(last) {
+					db.names_pop_back()
+                    return cs
+				}
+			}
+			
+			for t.curChar() != 'E' {
+				t1 := parse_unresolved_qualifier_level(t, last, db)
+				if t1.equals(t) || t1.equals(last) ||
+				    (db.names_size() < 2) {
+					return cs	
+				}
+				
+				s := db.names_back().move_full()
+				db.names_pop_back()
+				db.names_back().first += "::" + (s)
+				t.Pos = t1.Pos
+			}
+			
+			t.Pos++
+			t1 = parse_base_unresolved_name(t, last, db)
+			if t1.equals(t) {
+				if !db.names_empty() {
+					db.names_pop_back()
+				}
+				
+				return cs
+			}
+			if db.names_size() < 2 {
+				return cs
+			}
+			s := db.names_back().move_full()
+            db.names_pop_back()
+            db.names_back().first += "::" + (s)
+            cs.Pos = t1.Pos
+		} else {
+			t1 := parse_unresolved_type(t, last, db)
+			if !t1.equals(t) {
+				t.Pos = t1.Pos
+                t1 = parse_template_args(t, last, db)
+				if !t1.equals(t) {
+					if db.names_size() < 2 {
+						return cs
+					}
+					args := db.names_back().move_full()
+            		db.names_pop_back()
+            		db.names_back().first += "::" + (args)
+            		t.Pos = t1.Pos
+				}
+				t1 = parse_base_unresolved_name(t, last, db)
+				if t1.equals(t) {
+					if !db.names_empty() {
+						db.names_pop_back()
+					}
+					return cs
+				}
+				if db.names_size() < 2 {
+					return cs
+				}
+				s := db.names_back().move_full()
+	            db.names_pop_back()
+	            db.names_back().first += "::" + (s)
+	            cs.Pos = t1.Pos
+			} else {
+				t1 = parse_unresolved_qualifier_level(t, last, db)
+				if t1.equals(t) || t1.equals(last) {
+					return cs
+				}
+				
+				t.Pos = t1.Pos
+                if (global) {
+					if db.names_empty() {
+						return cs
+					}
+					db.names_back().first = "::" + db.names_back().first
+				}
+				
+				for t.curChar() != 'E' {
+					t1 = parse_unresolved_qualifier_level(t, last, db)
+					if t1.equals(t) || t1.equals(last) || (db.names_size() < 2) {
+						return cs
+					}
+					
+					s := db.names_back().move_full()
+	            	db.names_pop_back()
+	            	db.names_back().first += "::" + (s)
+	            	cs.Pos = t1.Pos
+				}
+				t.Pos++
+				t1 = parse_base_unresolved_name(t, last, db)
+				if t1.equals(t) {
+					if !db.names_empty() {
+						db.names_pop_back()
+					}
+					return cs
+				}
+				if (db.names_size() < 2) {
+					return cs
+				}
+				s := db.names_back().move_full()
+	            db.names_pop_back()
+	            db.names_back().first += "::" + (s)
+	            cs.Pos = t1.Pos
+			}
+		}
+	}
+	return cs
+}
+
+func parse_unresolved_qualifier_level(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_base_unresolved_name(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
