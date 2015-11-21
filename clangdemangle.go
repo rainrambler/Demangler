@@ -2947,7 +2947,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 							cs = parse_sizeof_param_pack_expr(first, last, db)
                         	break
                     	case 'f':
-                        	cs = parse_sizeof_function_param_pack_expr(first, last, db)
+                        	cs = *parse_sizeof_function_param_pack_expr(first, last, db)
                         	break
 						}
 					}
@@ -3127,12 +3127,30 @@ func parse_sizeof_param_pack_expr(first, last *CStyleString, db *Db) CStyleStrin
 	return cs
 }
 
-func parse_sizeof_function_param_pack_expr(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+// sZ <function-param>                                  # size of a function parameter pack
+func parse_sizeof_function_param_pack_expr(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
 	
-	// TODO
+	if first.prefix(3) != "sZf"{
+		return cs
+	}
+	
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_function_param(tmpPos, last, db)
+	
+	if !t.equals(tmpPos) {
+		if db.names_empty() {
+			return cs
+		}
+
+        db.names_back().first = "sizeof...(" + db.names_back().move_full() + ")"
+		cs.Pos = t.Pos
+	}
+	
 	return cs
 }
 
