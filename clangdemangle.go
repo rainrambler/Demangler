@@ -2959,7 +2959,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 		case 't': {
 			switch t.nextChar() {
 				case 'e', 'i':
-				cs = parse_typeid_expr(first, last, db)
+				cs = *parse_typeid_expr(first, last, db)
                 break
 				case 'r':
 				db.names_push_back("throw")
@@ -3136,12 +3136,37 @@ func parse_sizeof_function_param_pack_expr(first, last *CStyleString, db *Db) CS
 	return cs
 }
 
-func parse_typeid_expr(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+// te <expression>                                      # typeid (expression)
+// ti <type>                                            # typeid (type)
+func parse_typeid_expr(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
 	
-	// TODO
+	if (first.prefix(2) != "te") &&
+	    (first.prefix(2) != "ti") {
+		return cs
+	}
+	
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	var t CStyleString
+	if cs.nextChar() == 'e' {
+		t = parse_expression(tmpPos, last, db)
+	} else {
+		t = parse_type(tmpPos, last, db)
+	}
+	
+	if !t.equals(tmpPos) {
+		if db.names_empty() {
+			return cs
+		}
+
+        db.names_back().first = "typeid(" + db.names_back().move_full() + ")"
+		cs.Pos = t.Pos
+	}
+	
 	return cs
 }
 
