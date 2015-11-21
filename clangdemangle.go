@@ -2582,7 +2582,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
             case 'n':
                 return parse_unresolved_name(first, last, db)
             case 's':
-                cs = parse_dot_star_expr(first, last, db)
+                cs = *parse_dot_star_expr(first, last, db)
                 break
             case 't':
                 cs = parse_dot_expr(first, last, db)
@@ -3406,8 +3406,8 @@ func parse_simple_id(first, last *CStyleString, db *Db) CStyleString {
 	}
 	t := parse_source_name(first, last, db)
 	if !t.equals(first) {
-		t1 := parse_template_args(t, last, db)
-		if !t1.equals(t) {
+		t1 := parse_template_args(&t, last, db)
+		if !t1.equals(&t) {
 			if (db.names_size() < 2) {
 				return cs
 			}
@@ -3447,8 +3447,8 @@ func parse_base_unresolved_name(first, last *CStyleString, db *Db) CStyleString 
 		if s[0] == 'o' {			
 			t := parse_operator_name(tmpPos, last, db)
 			if !t.equals(tmpPos) {
-				cs = parse_template_args(t, last, db)
-				if !cs.equals(t) {
+				cs = parse_template_args(&t, last, db)
+				if !cs.equals(&t) {
 					if db.names_size() < 2 {
 						return cs
 					}
@@ -3468,8 +3468,8 @@ func parse_base_unresolved_name(first, last *CStyleString, db *Db) CStyleString 
 		if t.equals(first) {
 			t = parse_operator_name(first, last, db)
 			if !t.equals(first) {
-				cs = parse_template_args(t, last, db)
-				if !cs.equals(t) {
+				cs = parse_template_args(&t, last, db)
+				if !cs.equals(&t) {
 					if db.names_size() < 2 {
 						return cs
 					}
@@ -3512,12 +3512,36 @@ func parse_destructor_name(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
-func parse_dot_star_expr(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+// ds <expression> <expression>                         # expr.*expr
+func parse_dot_star_expr(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
 	
-	// TODO
+	if first.prefix(2) != "ds" {
+		return cs
+	}
+
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_expression(tmpPos, last, db)
+	
+	if !t.equals(tmpPos) {
+		t1 := parse_expression(&t, last, db)
+		
+		if !t1.equals(&t) {
+			if db.names_size() < 2 {
+				return cs
+			}
+			
+			expr := db.names_back().move_full()
+            db.names_pop_back()
+            db.names_back().first += ".*" + (expr)
+			cs.Pos = t1.Pos
+		}
+	}
+	
 	return cs
 }
 
