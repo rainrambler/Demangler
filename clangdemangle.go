@@ -3150,12 +3150,65 @@ func parse_const_cast_expr(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// cl <expression>+ E      # call
+
 func parse_call_expr(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if last.calcDelta(first) < 4 {
+		return cs
+	}
+	
+	if (first.curChar() != 'c') || (first.nextChar() != 'l') {
+		return cs
+	}
+	
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_expression(tmpPos, last, db)
+	if !t.equals(tmpPos) {
+		if t.equals(last) {
+			return cs
+		}
+		if (db.names_empty()) {
+			return cs
+		}
+		
+		db.names_back().first += db.names_back().second
+		db.names_back().second = ""
+		db.names_back().first += "("
+		first_expr := true
+		for t.curChar() != 'E' {
+			t1 := parse_expression(&t, last, db)
+			if !t1.notEach(&t, last) {
+				return cs
+			}
+			if (db.names_empty()) {
+				return cs
+			}
+			tmp := db.names_back().move_full()
+            db.names_pop_back()
+			if len(tmp) > 0 {
+				if db.names_empty() {
+					return cs
+				}
+				if !first_expr {
+					db.names_back().first += ", "
+					first_expr = false
+				}
+				db.names_back().first += tmp
+			}
+			t.Pos = t1.Pos
+		}
+		t.Pos++
+		if db.names_empty() {
+			return cs
+		}
+		db.names_back().first += ")"
+		cs.Pos = t.Pos
+	}
+	
 	return cs
 }
 
