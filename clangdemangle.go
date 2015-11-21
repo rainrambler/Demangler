@@ -2992,12 +2992,39 @@ func parse_binary_expression(first, last *CStyleString, op string, db *Db) CStyl
 	return cs
 }
 
+// pt <expression> <expression>                    # expr->name
+// line 1549
 func parse_arrow_expr(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
 	
-	// TODO
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
+	
+	if (first.curChar() != 'p') || (first.nextChar() != 't') {
+		return cs
+	}
+	
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_expression(tmpPos, last, db)
+	if !t.equals(tmpPos) {
+		t1 := parse_expression(&t, last, db)
+		
+		if !t1.equals(&t) {
+			if db.names_size() < 2 {
+				return cs
+			}
+			
+			tmp := db.names_back().move_full()
+			db.names_pop_back()
+            db.names_back().first += "->"
+            db.names_back().first += tmp
+            cs.Pos = t1.Pos
+		}
+	}
+	
 	return cs
 }
 
