@@ -2731,8 +2731,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 					}
 				}
 				break
-			}
-			
+			}			
 		}
 		break
 		case 'n': {
@@ -2768,10 +2767,201 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 			}
 		}
 		break
-		// TODO
+		case 'o':
+		tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+		switch t.nextChar() {
+			case 'n':
+                return parse_unresolved_name(first, last, db)
+			case 'o':
+				t = parse_binary_expression(tmpPos, last, "||", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
+			case 'r':
+				t = parse_binary_expression(tmpPos, last, "|", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
+			case 'R':
+				t = parse_binary_expression(tmpPos, last, "|=", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
+		}
+		break
+		case 'p': {
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+			switch t.nextChar() {
+				case 'm':
+				t = parse_binary_expression(tmpPos, last, "->*", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
+				case 'l':
+				t = parse_binary_expression(tmpPos, last, "+", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
+				case 'L':
+				t = parse_binary_expression(tmpPos, last, "+=", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
+				case 's':
+				t = parse_prefix_expression(tmpPos, last, "+", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
+				case 'p': {
+					if !tmpPos.equals(last) && (tmpPos.curChar() == '_') {
+						tmpPos.Pos++
+						t = parse_prefix_expression(tmpPos, last, "++", db)
+						if !t.equals(tmpPos) {
+							cs.Pos = t.Pos
+						}
+					} else {
+						t1 := parse_expression(tmpPos, last, db)
+						if !t1.equals(tmpPos) {
+							if (db.names_empty()) {
+								return cs
+							}
+							
+							db.names_back().first = "(" + db.names_back().move_full() +
+							     ")++"
+	                        cs.Pos = t1.Pos
+						}
+					}					
+				}
+				break
+				case 't':
+                cs = parse_arrow_expr(first, last, db)
+                break
+			}
+		}
+		break
+		case 'q':
+		tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+		if t.nextChar() == 'u' {
+			t1 := parse_expression(tmpPos, last, db)
+			if !t1.equals(tmpPos) {
+				t2 := parse_expression(&t1, last, db)
+				if !t2.equals(&t1) {
+					t3 := parse_expression(&t2, last, db)
+					if !t3.equals(&t2) {
+						if (db.names_size() < 3) {
+							return cs
+						}
+						
+						op3 := db.names_back().move_full()
+                        db.names_pop_back()
+                        op2 := db.names_back().move_full()
+                        db.names_pop_back()
+                        op1 := db.names_back().move_full()
+                        db.names_back().first = "(" + op1 + ") ? (" + op2 +
+						     ") : (" + op3 + ")"
+						cs.Pos = t3.Pos
+					} else {
+						db.names_pop_back()
+						db.names_pop_back()
+					}
+				} else {
+					db.names_pop_back()
+				}
+			}
+		}
+		break
+		case 'r': {
+			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+			switch t.nextChar() {
+				case 'c':
+				cs = parse_reinterpret_cast_expr(first, last, db)
+				break
+				case 'm':
+				t = parse_binary_expression(tmpPos, last, "%", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
+				case 'M':
+				t = parse_binary_expression(tmpPos, last, "%=", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
+				case 's':
+				t = parse_binary_expression(tmpPos, last, ">>", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
+				case 'S':
+				t = parse_binary_expression(tmpPos, last, ">>==", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
+			}
+		}
+		break
+		case 's': {
+			switch t.curChar() {
+				case 'c':
+				cs = parse_static_cast_expr(first, last, db)
+                break
+				case 'p':
+                cs = parse_pack_expansion(first, last, db)
+                break
+            	case 'r':
+                return parse_unresolved_name(first, last, db)
+            	case 't':
+                cs = parse_sizeof_type_expr(first, last, db)
+                break
+            	case 'z':
+                cs = parse_sizeof_expr_expr(first, last, db)
+                break
+				case 'Z': {
+					if last.calcDelta(&t) >= 3 {
+						t.Pos += 2
+						switch t.curChar() {
+						case 'T':
+							cs = parse_sizeof_param_pack_expr(first, last, db)
+                        	break
+                    	case 'f':
+                        	cs = parse_sizeof_function_param_pack_expr(first, last, db)
+                        	break
+						}
+					}
+				}
+				break
+			}
+		}
+		break
+		case 't': {
+			switch t.nextChar() {
+				case 'e', 'i':
+				cs = parse_typeid_expr(first, last, db)
+                break
+				case 'r':
+				db.names_push_back("throw")
+				cs.Pos += 2
+				break
+				case 'w':
+				cs = parse_throw_expr(first, last, db)
+				break
+			}
+		}
+		break
+		case '1','2','3','4','5','6','7','8','9':
+		return parse_unresolved_name(first, last, db)
 	}
 	
-	// TODO
 	return cs
 }
 
@@ -2794,6 +2984,96 @@ func parse_prefix_expression(first, last *CStyleString, op string, db *Db) CStyl
 }
 
 func parse_binary_expression(first, last *CStyleString, op string, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_arrow_expr(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_reinterpret_cast_expr(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_static_cast_expr(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_pack_expansion(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_sizeof_type_expr(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_sizeof_expr_expr(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_sizeof_param_pack_expr(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_sizeof_function_param_pack_expr(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_typeid_expr(first, last *CStyleString, db *Db) CStyleString {
+	var cs CStyleString
+	cs.Content = first.Content
+	cs.Pos = first.Pos
+	
+	// TODO
+	return cs
+}
+
+func parse_throw_expr(first, last *CStyleString, db *Db) CStyleString {
 	var cs CStyleString
 	cs.Content = first.Content
 	cs.Pos = first.Pos
