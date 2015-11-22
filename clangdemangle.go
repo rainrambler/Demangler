@@ -454,12 +454,71 @@ func parse_decltype(first, last *CStyleString, db *Db) CStyleString {
 //                         ::= Dv [<dimension expression>] _ <element type>
 // <extended element type> ::= <element type>
 //                         ::= p # AltiVec vector pixel
-func parse_vector_type(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+func parse_vector_type(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) <= 3 {
+		return cs
+	}
 	
-	// TODO
+	if first.prefix(2) != "Dv" {
+		return cs
+	}
+
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	if isNonZeroNumberChar(tmpPos.curChar()) {
+		t := parse_number(tmpPos, last)
+		if t.equals(last) || (t.curChar() != '_') {
+			return cs
+		}
+		
+		sz := t.calcDelta(tmpPos)
+		t.Pos++
+		if !t.equals(last) {
+			if t.curChar() != 'p' {
+				t1 := parse_type(&t, last, db)
+				if !t1.equals(&t) {
+					if db.names_empty() {
+						return cs
+					}
+					db.names_back().first += " vector[" + tmpPos.prefix(sz) + "]"
+                    cs.Pos = t1.Pos
+				}
+			} else {
+				t.Pos++
+				db.names_push_back("pixel vector[" + tmpPos.prefix(sz) + "]")
+                cs.Pos = t.Pos
+			}
+		}
+	} else {
+		num := ""
+		t1 := &CStyleString{cs.Content, cs.Pos + 2}
+		if t1.curChar() != '_' {
+			t := parse_expression(t1, last, db)
+			if !t.equals(t1) {
+				if (db.names_empty()) {
+					return cs
+				}
+				num = db.names_back().move_full()
+                db.names_pop_back()
+				t1.Pos = t.Pos
+			}
+		}
+		
+		if !t1.equals(last) && (t1.curChar() == '_') &&
+			!t1.isNext(last) {
+			t1.Pos++
+			t := parse_type(t1, last, db)
+			if !t.equals(t1) {
+				if (db.names_empty()) {
+					return cs
+				}
+				db.names_back().first += " vector[" + num + "]"
+                cs.Pos = t.Pos
+			}
+		}
+	}
+	
 	return cs
 }
 
@@ -4485,7 +4544,7 @@ func parse_type(first, last *CStyleString, db *Db) CStyleString {
 					}
 					return cs
 				} else if (c == 'v') {
-					t = parse_vector_type(first, last, db)
+					t = *parse_vector_type(first, last, db)
 					if t.Pos != first.Pos {
 						if db.names_empty() {
 							return cs
