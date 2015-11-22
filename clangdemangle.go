@@ -2432,9 +2432,37 @@ func parse_unresolved_type(first, last *CStyleString, db *Db) *CStyleString {
 			}
 		}
 		break
-		
+		case 'D':
+        t = parse_decltype(first, last, db)
+		if !t.equals(first) {
+			if db.names_empty() {
+				return cs
+			}
+			db.subs_push_back_pair(*db.names_back())
+			cs.Pos = t.Pos
+		}
+		break
+		case 'S':
+		t = parse_substitution(first, last, db)
+		if !t.equals(first) {
+			cs.Pos = t.Pos
+		} else {
+			if (last.calcDelta(first) > 2) &&
+				(first.nextChar() == 't') {
+				tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+    			t = parse_unqualified_name(tmpPos, last, db)	
+				if !t.equals(tmpPos) {
+					if db.names_empty() {
+						return cs
+					}
+					db.names_back().first = "std::" + db.names_back().first
+					db.subs_push_back_pair(*db.names_back())
+					cs.Pos = t.Pos
+				}
+			}
+		}
 	}
-	// TODO
+
 	return cs
 }
 
