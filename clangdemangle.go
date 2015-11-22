@@ -3113,12 +3113,45 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 	return cs
 }
 
+// <function-param> ::= fp <top-level CV-qualifiers> _                                     # L == 0, first parameter
+//                  ::= fp <top-level CV-qualifiers> <parameter-2 non-negative number> _   # L == 0, second and later parameters
+//                  ::= fL <L-1 non-negative number> p <top-level CV-qualifiers> _         # L > 0, first parameter
+//                  ::= fL <L-1 non-negative number> p <top-level CV-qualifiers> <parameter-2 non-negative number> _   # L > 0, second and later parameters
 func parse_function_param(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
 	
-	// TODO
+	if cs.curChar() != 'f' {
+		return cs
+	}
+	
+	cv := 0
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	if cs.nextChar() == 'p' {
+		t := parse_cv_qualifiers(tmpPos, last, &cv)
+		t1 := parse_number(t, last)
+		if !t1.equals(last) && (t1.curChar() == '_') {
+			s := t.prefix(t1.calcDelta(t))
+			db.names_push_back("fp" + s)
+			cs.Pos = t1.Pos + 1
+		}
+	} else if cs.nextChar() == 'L' {
+		t0 := parse_number(tmpPos, last)
+		if !t0.equals(last) && (t0.curChar() == 'p') {
+			t0.Pos++
+			t := parse_cv_qualifiers(t0, last, &cv)
+			t1 := parse_number(t, last)
+			if !t1.equals(last) && (t1.curChar() == '_') {
+				s := t.prefix(t1.calcDelta(t))
+				db.names_push_back("fp" + s)
+				cs.Pos = t1.Pos + 1
+			}
+		}
+	}
+	
 	return cs
 }
 
