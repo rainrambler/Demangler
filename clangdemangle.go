@@ -879,7 +879,129 @@ func parse_new_expr(first, last *CStyleString, db *Db) *CStyleString {
 		return cs
 	}
 	
-	// TODO
+	t := &CStyleString{first.Content, first.Pos}
+	parsed_gs := false
+	if t.prefix(2) == "gs" {
+		t.Pos += 2
+		parsed_gs = true
+	}
+	
+	if (t.prefix(2) == "nw") || (t.prefix(2) == "na") {
+		is_array := (t.nextChar() == 'a')
+		t.Pos += 2
+		
+		if t.equals(last) {
+			return cs
+		}
+		
+		has_expr_list := false
+        first_expr := true
+		
+		for (t.curChar() != '_') {
+			t1 := parse_expression(t, last, db)
+			if t1.equals(t) || t1.equals(last) {
+				return cs
+			}
+			
+			has_expr_list = true
+			if !first_expr {
+				if db.names_empty() {
+					return cs
+				}
+				
+				tmp := db.names_back().move_full()
+				db.names_pop_back()
+				if len(tmp) > 0 {
+					if db.names_empty() {
+						return cs
+					}
+					db.names_back().first += (", ")
+                    db.names_back().first += (tmp)
+                    first_expr = false
+				}
+			}
+			t.Pos = t1.Pos
+		}
+		t.Pos++
+		t1 := parse_type(t, last, db)
+		if t1.equals(t) || t1.equals(last) {
+			return cs
+		}
+		t.Pos = t1.Pos
+		has_init := false
+		if (last.calcDelta(t) >= 3) && 
+			(t.prefix(2) == "pi") {
+			t.Pos += 2
+			has_init = true
+            first_expr = true
+			for (t.curChar() != 'E') {
+				t1 = parse_expression(t, last, db)
+				if t1.equals(t) || t1.equals(last) {
+					return cs
+				}
+				if !first_expr {
+					if db.names_empty() {
+						return cs
+					}
+					tmp := db.names_back().move_full()
+					db.names_pop_back()
+					if len(tmp) > 0 {
+						if db.names_empty() {
+							return cs
+						}
+						db.names_back().first += (", ")
+                        db.names_back().first += (tmp)
+                        first_expr = false
+					}
+				}
+				t.Pos = t1.Pos
+			}
+		}
+		if t.curChar() != 'E' {
+			return cs
+		}
+		init_list := ""
+		if (has_init) {
+			if db.names_empty() {
+				return cs
+			}
+			init_list = db.names_back().move_full()
+            db.names_pop_back()
+		}
+		if db.names_empty() {
+			return cs
+		}
+		typ := db.names_back().move_full()
+        db.names_pop_back()
+		expr_list := ""
+		if has_expr_list {
+			if db.names_empty() {
+				return cs
+			}
+			expr_list = db.names_back().move_full()
+            db.names_pop_back()
+		}
+		r := ""
+		if (parsed_gs) {
+			r = "::"
+		}
+
+        if (is_array) {
+			r += "[] "	
+		} else {
+			r += " "
+		}
+        if (has_expr_list) {
+			r += "(" + expr_list + ") "
+		}
+        r += typ
+        if (has_init) {
+			r += " (" + init_list + ")"
+		}
+        db.names_push_back(r)
+        cs.Pos = t.Pos + 1
+	}
+	
 	return cs
 }
 
