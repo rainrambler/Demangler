@@ -2933,7 +2933,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 		case 's': {
 			switch t.curChar() {
 				case 'c':
-				cs = parse_static_cast_expr(first, last, db)
+				cs = *parse_static_cast_expr(first, last, db)
                 break
 				case 'p':
                 cs = parse_pack_expansion(first, last, db)
@@ -3114,12 +3114,37 @@ func parse_reinterpret_cast_expr(first, last *CStyleString, db *Db) *CStyleStrin
 	return cs
 }
 
-func parse_static_cast_expr(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+// sc <type> <expression>         # static_cast<type> (expression)
+func parse_static_cast_expr(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
 	
-	// TODO
+	if first.prefix(2) != "sc" {
+		return cs
+	}
+
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_type(tmpPos, last, db)
+	
+	if !t.equals(tmpPos) {
+		t1 := parse_expression(&t, last, db)
+		
+		if !t1.equals(&t) {
+			if db.names_size() < 2 {
+				return cs
+			}
+			
+			expr := db.names_back().move_full()
+            db.names_pop_back()
+            db.names_back().first = "static_cast<" + 
+				db.names_back().move_full() + ">(" + expr + ")"
+			cs.Pos = t1.Pos
+		}
+	}
+	
 	return cs
 }
 
