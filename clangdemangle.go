@@ -1005,12 +1005,18 @@ func parse_new_expr(first, last *CStyleString, db *Db) *CStyleString {
 	return cs
 }
 
-func parse_noexcept_expression(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+func parse_noexcept_expression(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	t1 := parse_expression(first, last, db)
+	if !t1.equals(first) {
+		if db.names_empty() {
+			return cs
+		}
+		db.names_back().first = "noexcept (" + db.names_back().move_full() + ")"
+        cs.Pos = t1.Pos
+	}
 	
-	// TODO
 	return cs
 }
 
@@ -2901,7 +2907,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 				}
                 break
 				case 'x':
-				t = parse_noexcept_expression(tmpPos, last, db)
+				t = *parse_noexcept_expression(tmpPos, last, db)
                 if !t.equals(tmpPos) {
 					cs.Pos = t.Pos
 				}
