@@ -2593,7 +2593,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
         cs = parse_template_param(first, last, db)
         break
         case 'f':
-        cs = parse_function_param(first, last, db)
+        cs = *parse_function_param(first, last, db)
         break
 		case 'a': {
 			tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
@@ -3064,7 +3064,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 				cs = *parse_static_cast_expr(first, last, db)
                 break
 				case 'p':
-                cs = parse_pack_expansion(first, last, db)
+                cs = *parse_pack_expansion(first, last, db)
                 break
             	case 'r':
                 return parse_unresolved_name(first, last, db)
@@ -3117,7 +3117,7 @@ func parse_expression(first, last *CStyleString, db *Db) CStyleString {
 //                  ::= fp <top-level CV-qualifiers> <parameter-2 non-negative number> _   # L == 0, second and later parameters
 //                  ::= fL <L-1 non-negative number> p <top-level CV-qualifiers> _         # L > 0, first parameter
 //                  ::= fL <L-1 non-negative number> p <top-level CV-qualifiers> <parameter-2 non-negative number> _   # L > 0, second and later parameters
-func parse_function_param(first, last *CStyleString, db *Db) CStyleString {
+func parse_function_param(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
 
 	if last.calcDelta(first) < 3 {
@@ -3132,9 +3132,9 @@ func parse_function_param(first, last *CStyleString, db *Db) CStyleString {
 	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
 	if cs.nextChar() == 'p' {
 		t := parse_cv_qualifiers(tmpPos, last, &cv)
-		t1 := parse_number(t, last)
+		t1 := parse_number(&t, last)
 		if !t1.equals(last) && (t1.curChar() == '_') {
-			s := t.prefix(t1.calcDelta(t))
+			s := t.prefix(t1.calcDelta(&t))
 			db.names_push_back("fp" + s)
 			cs.Pos = t1.Pos + 1
 		}
@@ -3142,10 +3142,10 @@ func parse_function_param(first, last *CStyleString, db *Db) CStyleString {
 		t0 := parse_number(tmpPos, last)
 		if !t0.equals(last) && (t0.curChar() == 'p') {
 			t0.Pos++
-			t := parse_cv_qualifiers(t0, last, &cv)
-			t1 := parse_number(t, last)
+			t := parse_cv_qualifiers(&t0, last, &cv)
+			t1 := parse_number(&t, last)
 			if !t1.equals(last) && (t1.curChar() == '_') {
-				s := t.prefix(t1.calcDelta(t))
+				s := t.prefix(t1.calcDelta(&t))
 				db.names_push_back("fp" + s)
 				cs.Pos = t1.Pos + 1
 			}
@@ -3309,12 +3309,24 @@ func parse_static_cast_expr(first, last *CStyleString, db *Db) *CStyleString {
 	return cs
 }
 
-func parse_pack_expansion(first, last *CStyleString, db *Db) CStyleString {
-	var cs CStyleString
-	cs.Content = first.Content
-	cs.Pos = first.Pos
+// sp <expression>        # pack expansion
+func parse_pack_expansion(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+
+	if last.calcDelta(first) < 3 {
+		return cs
+	}
 	
-	// TODO
+	if cs.prefix(2) != "sp" {
+		return cs
+	}
+	
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	t := parse_expression(tmpPos, last, db)
+	if !t.equals(tmpPos) {
+		cs.Pos = t.Pos
+	}
+	
 	return cs
 }
 
