@@ -677,7 +677,6 @@ func parse_encoding(first, last *CStyleString, db *Db) *CStyleString {
 	db.ref = ref1
 	db.encoding_depth = su // ???
 	db.tag_templates = sb
-	// TODO
 	return cs
 }
 
@@ -894,6 +893,12 @@ func parse_template_arg(first, last *CStyleString, db *Db) *CStyleString {
 	return cs
 }
 
+func parse_floating_number(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+	// TODO
+	return cs
+}
+
 // <expr-primary> ::= L <type> <value number> E                          # integer literal
 //                ::= L <type> <value float> E                           # floating literal
 //                ::= L <string type> E                                  # string literal
@@ -904,7 +909,191 @@ func parse_template_arg(first, last *CStyleString, db *Db) *CStyleString {
 func parse_expr_primary(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
 	
-	// TODO
+	if last.calcDelta(first) < 4 {
+		return cs
+	}
+	
+	if first.curChar() != 'L' {
+		return cs
+	}
+	tmpPos := &CStyleString{cs.Content, cs.Pos + 2}
+	switch cs.nextChar() {
+		case 'w':
+		t := parse_integer_literal(tmpPos, last, "wchar_t", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'b':
+		if tmpPos.nextChar() == 'E' {
+			switch tmpPos.curChar() {
+				case '0':
+				db.names_push_back("false")
+				cs.Pos +=4
+				break
+				case '1':
+				db.names_push_back("true")
+				cs.Pos +=4
+				break
+			}
+		}
+		break
+		case 'c':
+		t := parse_integer_literal(tmpPos, last, "char", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'a':
+		t := parse_integer_literal(tmpPos, last, "signed char", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'h':
+		t := parse_integer_literal(tmpPos, last, "unsigned char", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 's':
+		t := parse_integer_literal(tmpPos, last, "short", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 't':
+		t := parse_integer_literal(tmpPos, last, "signed char", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'i':
+		t := parse_integer_literal(tmpPos, last, "", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'j':
+		t := parse_integer_literal(tmpPos, last, "u", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'l':
+		t := parse_integer_literal(tmpPos, last, "l", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'm':
+		t := parse_integer_literal(tmpPos, last, "ul", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'x':
+		t := parse_integer_literal(tmpPos, last, "ll", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'y':
+		t := parse_integer_literal(tmpPos, last, "ull", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'n':
+		t := parse_integer_literal(tmpPos, last, "__int128", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'o':
+		t := parse_integer_literal(tmpPos, last, "unsigned __int128", db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'f':
+		t := parse_floating_number(tmpPos, last, db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'd':
+		t := parse_floating_number(tmpPos, last, db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case 'e':
+		t := parse_floating_number(tmpPos, last, db)
+		if !t.equals(tmpPos) {
+			cs.Pos = t.Pos
+		}
+		break
+		case '_':
+		if tmpPos.curChar() == 'Z' {
+			tmpPos.Pos++
+			t := parse_encoding(tmpPos, last, db)
+			if t.notEach(tmpPos, last) && (t.curChar() == 'E') {
+				cs.Pos = t.Pos + 1
+			}
+		}
+		break
+		case 'T':
+        // Invalid mangled name per
+        //   http://sourcerytools.com/pipermail/cxx-abi-dev/2011-August/002422.html
+        break
+		default:
+		tmpPos := &CStyleString{cs.Content, cs.Pos + 1}
+		t := parse_type(tmpPos, last, db)
+		if t.notEach(tmpPos, last) {
+			if t.curChar() != 'E' {
+				n := &CStyleString{t.Content, t.Pos}
+				for !n.equals(last) && isNumberChar(n.curChar()) {
+					n.Pos++
+				}
+				if n.notEach(t, last) && (n.curChar() == 'E') {
+					if db.names_empty() {
+						return cs
+					}
+					db.names_back().first = "(" + db.names_back().move_full() + 
+						")" + t.prefix(n.Pos - t.Pos)
+					cs.Pos = n.Pos + 1
+				}
+			} else {
+				cs.Pos = t.Pos + 1
+			}
+		}
+	}
+	return cs
+}
+
+// line 2633
+func parse_integer_literal(first, last *CStyleString, lit string, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+	t := parse_number(first, last)
+	if t.notEach(first, last) && (t.curChar() == 'E') {
+		if len(lit) > 3 {
+			db.names_push_back("(" + lit + ")")
+		} else {
+			db.names_emplace_back()
+		}
+		
+		if first.curChar() == 'n' {
+			db.names_back().first += "-"
+			cs.Pos++
+		}
+		
+		db.names_back().first += first.prefix(t.Pos - first.Pos)
+		if len(lit) <= 3 {
+			db.names_back().first += lit
+		}
+		cs.Pos = t.Pos + 1
+	}
 	return cs
 }
 
@@ -2128,7 +2317,6 @@ func parse_unnamed_type_name(first, last *CStyleString, db *Db) *CStyleString {
 				t1.Pos++
 			}
 			
-			// TODO 
 			// db.names.back().first.append(t0, t1);
 			db.names_back().first += t1.Content[t0.Pos:t1.Pos]
 			t0.Pos = t1.Pos
@@ -2402,7 +2590,83 @@ func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool
 func parse_substitution(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
 	
-	// TODO
+	if last.calcDelta(first) < 2 {
+		return cs
+	}
+	
+	if first.curChar() != 'S' {
+		return cs
+	}
+	
+	switch first.nextChar() {
+		case 'a':
+        db.names_push_back("std::allocator")
+        cs.Pos += 2
+        break
+		case 'b':
+		db.names_push_back("std::basic_string")
+		cs.Pos += 2
+		break
+		case 's':
+		db.names_push_back("std::string")
+		cs.Pos += 2
+		break
+		case 'i':
+		db.names_push_back("std::istream")
+		cs.Pos += 2
+		break
+		case 'o':
+		db.names_push_back("std::ostream")
+		cs.Pos += 2
+		break
+		case 'd':
+		db.names_push_back("std::iostream")
+		cs.Pos += 2
+		break
+		case '_':
+		if !db.subs_empty() {
+			// ???
+			for _, n := range db.subs.content[0].content {
+				db.names_push_back(n.first)
+			}
+			cs.Pos += 2
+		}
+		break
+		default:
+		c := first.nextChar()
+		if isNumberChar(c) || isUpperChar(c) {
+			sub := 0
+			t := &CStyleString{cs.Content, cs.Pos + 1}
+			if isNumberChar(t.curChar()) {
+				sub = int(t.curChar() - '0')
+			} else {
+				sub = int(t.curChar() - 'A') + 10
+			}
+			t.Pos++
+			for !t.equals(last) && (isNumberChar(t.curChar()) ||
+				isUpperChar(t.curChar())) {
+				sub *= 36
+				if isNumberChar(t.curChar()) {
+					sub = int(t.curChar() - '0')
+				} else {
+					sub = int(t.curChar() - 'A') + 10
+				}
+				t.Pos++
+			}
+			
+			if t.equals(last) || (t.curChar() != '_') {
+				return cs
+			}
+			sub++
+			if sub < len(db.subs.content) {
+				for _, n := range db.subs.content[sub].content {
+					db.names_push_back(n.first)
+				}
+				cs.Pos = t.Pos + 1
+			}
+		}
+		break
+	}
 	return cs
 }
 
@@ -2643,13 +2907,11 @@ func parse_expression(first, last *CStyleString, db *Db) *CStyleString {
 		return cs
 	}
 	
-	t := &CStyleString{first.Content, first.Pos}
-	
+	t := &CStyleString{first.Content, first.Pos}	
 	parsed_gs := false
 	
 	if (last.calcDelta(first) >= 4) &&
-	    (t.curChar() == 'g') && 
-		(t.nextChar() == 's') {
+	    (t.prefix(2) == "gs") {
 		t.Pos += 2
 		parsed_gs = true	
 	}
@@ -2703,7 +2965,6 @@ func parse_expression(first, last *CStyleString, db *Db) *CStyleString {
 				case 'z':
 	            cs = parse_alignof_expr(first, last, db)
 	            break
-				// TODO
 			}
 		}
 		break
@@ -3029,13 +3290,7 @@ func parse_expression(first, last *CStyleString, db *Db) *CStyleString {
                 if !t.equals(tmpPos) {
 					cs.Pos = t.Pos
 				}
-                break
-				case 's':
-				t = parse_prefix_expression(tmpPos, last, "+", db)
-                if !t.equals(tmpPos) {
-					cs.Pos = t.Pos
-				}
-                break
+                break				
 				case 'p': {
 					if !tmpPos.equals(last) && (tmpPos.curChar() == '_') {
 						tmpPos.Pos++
@@ -3057,6 +3312,12 @@ func parse_expression(first, last *CStyleString, db *Db) *CStyleString {
 					}					
 				}
 				break
+				case 's':
+				t = parse_prefix_expression(tmpPos, last, "+", db)
+                if !t.equals(tmpPos) {
+					cs.Pos = t.Pos
+				}
+                break
 				case 't':
                 cs = parse_arrow_expr(first, last, db)
                 break
@@ -4265,7 +4526,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 					}
 					
 					cs.Pos = t.Pos
-					// TODO
+					db.subs_push_back_pair(*db.names_back())
 					// ??? db.subs.push_back(typename C::sub_type(1, db.names.back(), db.names.get_allocator()));
 				}
 			} else if c == 'C' {
@@ -4279,7 +4540,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 					
 					db.names_back().first += " complex"
 					cs.Pos = t.Pos
-					// TODO
+					db.subs_push_back_pair(*db.names_back())
 				}
 			} else if c == 'F' {
 				t = parse_function_type(cs, last, db)
@@ -4290,7 +4551,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 					}
 					
 					cs.Pos = t.Pos
-					// TODO
+					db.subs_push_back_pair(*db.names_back())
 				}
 			} else if c == 'G' {
 				cs.Pos++
@@ -4303,7 +4564,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 					
 					db.names_back().first += " imaginary"
 					cs.Pos = t.Pos
-					// TODO
+					db.subs_push_back_pair(*db.names_back())
 				}
 			} else if c == 'M' {
 				t = parse_pointer_to_member_type(cs, last, db)
@@ -4314,7 +4575,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 					}
 					
 					cs.Pos = t.Pos
-					// TODO
+					db.subs_push_back_pair(*db.names_back())
 				}
 			} else if c == 'O' {
 				cs.Pos++
@@ -4436,7 +4697,6 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 								db.names_back().first = ty + " " + 
 									db.names_back().move_full()
 							} else {
-								// TODO
 								proto := db.names_back().move_full()
 								db.names_pop_back()
 								
@@ -4462,7 +4722,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				}
 				return cs
 			} else if c == 'S' {
-				if ((first.Pos + 1) != last.Pos) && (first.Content[first.Pos + 1] == 't') {
+				if ((first.Pos + 1) != last.Pos) && (first.nextChar() == 't') {
 					t := parse_name(first, last, db, nil)
 					if t.Pos != first.Pos {
 						if db.names_size() == 0 {
@@ -4476,7 +4736,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 					if t.Pos != first.Pos {
 						cs.Pos = t.Pos
 						// Parsed a substitution.  If the substitution is a
-                           //  <template-param> it might be followed by <template-args>.
+                        //  <template-param> it might be followed by <template-args>.
 						t = parse_template_args(first, last, db)
 						if t.Pos != first.Pos {
 							if db.names_size() < 2 {
@@ -4487,7 +4747,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 							db.names_pop_back()
 							db.names_back().first += template_args
 							// Need to create substitution for <template-template-param> <template-args>
-							// TODO
+							db.subs_push_back_pair(*db.names_back())
 							cs.Pos = t.Pos
 						}
 					}
