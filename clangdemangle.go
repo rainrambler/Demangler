@@ -282,7 +282,7 @@ func demangle_clang(first, last *CStyleString, db *Db, status *int) {
 		}
 	}
 	
-	if (status == success) && db.names_empty() {
+	if (*status == success) && db.names_empty() {
 		*status = invalid_mangled_name
 	}
 }
@@ -301,6 +301,47 @@ func parse_dot_suffix(first, last *CStyleString, db *Db) *CStyleString {
 		cs.Pos = last.Pos
 	}
 	
+	return cs
+}
+
+// _block_invoke
+// _block_invoke<decimal-digit>+
+// _block_invoke_<decimal-digit>+
+func parse_block_invoke(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+	
+	if last.calcDelta(first) < 13 {
+		return cs
+	}
+	
+	test := "_block_invoke"
+	t := &CStyleString{first.Content, first.Pos}
+	if t.prefix(13) != test {
+		return cs
+	}
+	
+	t.Pos += 13
+	if !t.equals(last) {
+		if t.curChar() == '_' {
+			// must have at least 1 decimal digit
+			t.Pos++
+			if t.equals(last) || !isNumberChar(t.curChar()) {
+				return cs
+			}
+			t.Pos++
+		}
+		// parse zero or more digits
+		for !t.equals(last) && isNumberChar(t.curChar()) {
+			t.Pos++
+		}
+	}
+	
+	if db.names_empty() {
+		return cs
+	}
+	db.names_back().first = "invocation function for block in " + 
+		db.names_back().first
+	cs.Pos = t.Pos
 	return cs
 }
 
