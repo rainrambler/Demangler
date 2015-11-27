@@ -55,6 +55,10 @@ type template_param_type struct {
 	content []sub_type
 }
 
+func (p *template_param_type) empty() bool {
+	return len(p.content) == 0
+}
+
 type template_param_types struct {
 	content []template_param_type
 }
@@ -182,6 +186,15 @@ func (p *Db) template_param_back() *template_param_type {
 	return &p.template_param.content[size - 1] // the last
 }
 
+// the first template_params
+func (p *Db) template_param_front() *template_param_type {
+	size := len(p.template_param.content)
+	if size == 0 {
+		return nil
+	}
+	return &p.template_param.content[0] // the firsts
+}
+
 // the last sub_type
 func (p *Db) template_param_back_back() *sub_type {
 	size := len(p.template_param.content)
@@ -223,22 +236,30 @@ func cxa_demangle(mangledname string, status *int) string {
 	internal_status := success
 	mangledlen := len(mangledname)
 	
-	demangle2(mangledname, 0, mangledlen, &db,
-             &internal_status);
-	return mangledname
-}
-
-func demangle2(mangled string, first, last int, db *Db, status *int) {
-	if (first >= last) {
-        *status = invalid_mangled_name
-        return
-    }
+	first := &CStyleString{mangledname, 0}
+	last := &CStyleString{mangledname, mangledlen}
+	demangle_clang(first, last, &db, &internal_status)
 	
-	if mangled[first] == '_' {
-		if mangled[first + 1] == 'Z' {
-			// TODO
+	if (internal_status == success) && db.fix_forward_references &&
+		!db.template_param_empty() && !db.template_param_front().empty() {
+		db.fix_forward_references = false
+		db.tag_templates = false
+		db.names.content = []string_pair{}
+		db.subs.content = 	[]sub_type{}
+		demangle_clang(first, last, &db, &internal_status)
+		if db.fix_forward_references {
+			internal_status = invalid_mangled_name
 		}
 	}
+	
+	if internal_status == success {
+		db.names_back().first += db.names_back().second
+		return db.names_back().first
+	} else {
+		
+	}
+	*status = internal_status
+	return ""
 }
 
 func demangle_clang(first, last *CStyleString, db *Db, status *int) {
