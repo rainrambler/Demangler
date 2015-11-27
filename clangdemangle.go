@@ -1,8 +1,8 @@
 package main
 
 import (
-	//"fmt"
-	//"strings"
+	"encoding/binary"
+	"math"
 )
 
 const
@@ -239,6 +239,69 @@ func demangle2(mangled string, first, last int, db *Db, status *int) {
 			// TODO
 		}
 	}
+}
+
+func demangle_clang(first, last *CStyleString, db *Db, status *int) {
+	if (first.Pos >= last.Pos) {
+        *status = invalid_mangled_name
+        return
+    }
+	
+	if first.curChar() == '_' {
+		if last.calcDelta(first) >= 4 {
+			if first.nextChar() == 'Z' {
+				tmppos := &CStyleString{first.Content, first.Pos + 2}
+				t := parse_encoding(tmppos, last, db)
+				if t.notEach(tmppos, last) && (t.curChar() == '.') {
+					t = parse_dot_suffix(t, last, db)
+				}
+				if !t.equals(last) {
+					*status = invalid_mangled_name
+				}
+			} else if (first.prefix(4) == "___Z") {
+				tmppos := &CStyleString{first.Content, first.Pos + 4}
+				t := parse_encoding(tmppos, last, db)
+				if t.notEach(tmppos, last) {
+					t1 := parse_block_invoke(t, last, db)
+					if !t1.equals(last) {
+						*status = invalid_mangled_name
+					}
+				} else {
+					*status = invalid_mangled_name
+				}
+			} else {
+				*status = invalid_mangled_name
+			}
+		} else {
+			*status = invalid_mangled_name
+		}
+	} else {
+		t := parse_type(first, last, db)
+		if !t.equals(last) {
+			*status = invalid_mangled_name
+		}
+	}
+	
+	if (status == success) && db.names_empty() {
+		*status = invalid_mangled_name
+	}
+}
+
+// extension
+// <dot-suffix> := .<anything and everything>
+func parse_dot_suffix(first, last *CStyleString, db *Db) *CStyleString {
+	cs := &CStyleString{first.Content, first.Pos}
+	
+	if !first.equals(last) && (first.curChar() == '.') {
+		if db.names_empty() {
+			return cs
+		}
+		
+		db.names_back().first += " (" + first.prefix(last.Pos - first.Pos) + ")"
+		cs.Pos = last.Pos
+	}
+	
+	return cs
 }
 
 // <template-param> ::= T_    # first template parameter
@@ -893,8 +956,92 @@ func parse_template_arg(first, last *CStyleString, db *Db) *CStyleString {
 	return cs
 }
 
+const (
+	float_mangled_size = 8
+	float_max_demangled_size = 24
+	double_mangled_size = 16
+	double_max_demangled_size = 32
+)
+
+// http://stackoverflow.com/questions/22491876/convert-byte-array-uint8-to-float64-in-golang
+func Float64frombytes(bytes []byte) float64 {
+    bits := binary.LittleEndian.Uint64(bytes)
+    float := math.Float64frombits(bits)
+    return float
+}
+
+func Float64bytes(float float64) []byte {
+    bits := math.Float64bits(float)
+    bytes := make([]byte, 8)
+    binary.LittleEndian.PutUint64(bytes, bits)
+    return bytes
+}
+
+func Float32frombytes(bytes []byte) float32 {
+    bits := binary.LittleEndian.Uint32(bytes)
+    float := math.Float32frombits(bits)
+    return float
+}
+
+func Float32bytes(float float32) []byte {
+    bits := math.Float32bits(float)
+    bytes := make([]byte, 8)
+    binary.LittleEndian.PutUint32(bytes, bits)
+    return bytes
+}
+
+func isxdigit(b byte) bool {
+	if isNumberChar(b) {
+		return true
+	}
+	
+	if (b >= 'a') && (b <= 'f') {
+		return true
+	}
+	
+	return (b >= 'A') && (b <= 'F')
+}
+
 func parse_floating_number(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
+	
+	N := float_mangled_size
+	if last.calcDelta(first) <= N {
+		return cs
+	}
+	
+	//bs := []byte(first.Content[first.Pos:last.Pos])
+	//value := Float32frombytes(bs)
+	
+	// TODO
+	db.names_push_back(first.Content[first.Pos:last.Pos])
+	
+	/*
+	t := &CStyleString{first.Content, first.Pos}
+	t.Content = strings.ToLower(t.Content) // to lower case, because of minus 'a' 
+	for !t.equals(last) {
+		c := t.curChar()
+		if !isxdigit(c) {
+			return cs
+		}
+		
+		d1 := 0
+		d0 := 0
+		if isNumberChar(c) {
+			d1 = int(c - '0')
+		} else {
+			d1 = int(c - 'a' + 10)
+		}
+		t.Pos++
+		c = t.curChar()
+		if isNumberChar(c) {
+			d1 = int(c - '0')
+		} else {
+			d1 = int(c - 'a' + 10)
+		}
+	}
+	*/
+	
 	// TODO
 	return cs
 }
