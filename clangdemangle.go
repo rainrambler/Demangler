@@ -1523,9 +1523,9 @@ func parse_source_name(first, last *CStyleString, db *Db) *CStyleString {
 		}
 		
 		if (last.Pos - t.Pos) >= n {
-			r := t.Content[:n]
+			r := t.prefix(n)
 			
-			if r[:10] == "_GLOBAL__N" {
+			if (len(r) > 10) && (r[:10] == "_GLOBAL__N") {
 				db.names_push_back("(anonymous namespace)")
 			} else {
 				db.names_push_back(r)
@@ -2664,6 +2664,7 @@ func parse_ctor_dtor_name(first, last *CStyleString, db *Db) *CStyleString {
 // <unscoped-name> ::= <unqualified-name>
 //                 ::= St <unqualified-name>   # ::std::
 // extension       ::= StL<unqualified-name>
+// line 3122
 func parse_unscoped_name(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
 	
@@ -2682,7 +2683,7 @@ func parse_unscoped_name(first, last *CStyleString, db *Db) *CStyleString {
 	}
 	
 	t1 := parse_unqualified_name(t0, last, db)
-	if t1.equals(t0) {
+	if !t1.equals(t0) {
 		if St {
 			if db.names_empty() {
 				return cs
@@ -2712,7 +2713,7 @@ func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool
 		return cs
 	}
 	
-	t0 := first
+	t0 := &CStyleString{first.Content, first.Pos}
 	if t0.curChar() == 'L' {
 		t0.Pos++
 	}
@@ -2732,8 +2733,9 @@ func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool
 	} else {
 		t1 := parse_unscoped_name(t0, last, db)
 		
-		if t1.Pos != t0.Pos {
-			if (t1.Pos != last.Pos) && (t1.curChar() == 'I') {
+		if !t1.equals(t0) {
+			if !t1.equals(last) && (t1.curChar() == 'I') {
+				// <unscoped-template-name> <template-args>
 				if db.names_empty() {
 					return cs
 				}
