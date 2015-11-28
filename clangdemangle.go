@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"encoding/binary"
 	"math"
 )
@@ -66,6 +67,12 @@ type template_param_types struct {
 type CStyleString struct {
 	Content   string
 	Pos       int
+}
+
+// for debug
+func (p *CStyleString) dbgPrint(prefix string) {
+	fmt.Printf(prefix + " Content: %v, Pos: %v, Start: %v\n", 
+		p.Content, p.Pos, p.Content[p.Pos:])
 }
 
 func (p *CStyleString) curChar() byte {
@@ -1850,6 +1857,7 @@ func parse_array_type(first, last *CStyleString, db *Db) *CStyleString {
 // line 3082
 func parse_unqualified_name(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
+	cs.dbgPrint("parse_unqualified_name first:")
 	
 	if first.equals(last) {
 		return cs
@@ -1879,6 +1887,7 @@ func parse_unqualified_name(first, last *CStyleString, db *Db) *CStyleString {
 		}
 	}
 	
+	cs.dbgPrint("parse_unqualified_name return:")
 	return cs
 }
 
@@ -2667,6 +2676,7 @@ func parse_ctor_dtor_name(first, last *CStyleString, db *Db) *CStyleString {
 // line 3122
 func parse_unscoped_name(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
+	cs.dbgPrint("parse_unscoped_name first:")
 	
 	if last.calcDelta(first) < 2 {
 		return first
@@ -2695,6 +2705,7 @@ func parse_unscoped_name(first, last *CStyleString, db *Db) *CStyleString {
 		cs.Pos = t1.Pos
 	}
 	
+	cs.dbgPrint("parse_unscoped_name return:")
 	return cs
 }
 
@@ -2708,6 +2719,7 @@ func parse_unscoped_name(first, last *CStyleString, db *Db) *CStyleString {
 // line 4174
 func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
+	cs.dbgPrint("parse_name first:")
 	
 	if last.calcDelta(first) < 2 {
 		return cs
@@ -2784,6 +2796,7 @@ func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool
 		}
 	}
 	
+	cs.dbgPrint("parse_name return:")
 	return cs
 }
 
@@ -2972,15 +2985,15 @@ func parse_unresolved_type(first, last *CStyleString, db *Db) *CStyleString {
 //                ::= Dc   # decltype(auto)
 //                ::= Dn   # std::nullptr_t (i.e., decltype(nullptr))
 //                ::= u <source-name>    # vendor extended type
-func parse_builtin_type(first, last *CStyleString, db *Db) *CStyleString {
+func parse_builtin_type(first, last *CStyleString, db *Db) *CStyleString {	
 	cs := &CStyleString{first.Content, first.Pos}
+	cs.dbgPrint("parse_builtin_type first:")
+	last.dbgPrint("parse_builtin_type last:")
 	
 	if first.Pos == last.Pos {
 		return cs
 	}
-	
-	cs.Pos++
-	
+		
 	c := first.curChar()
 	if c == 'v' {
 		db.names_push_back("void")
@@ -3025,8 +3038,9 @@ func parse_builtin_type(first, last *CStyleString, db *Db) *CStyleString {
 	} else if c == 'z' {
 		db.names_push_back("...")
 	} else if c == 'u' {
-		t := parse_source_name(cs, last, db)
-		if t.Pos != cs.Pos {
+		tmpPos := &CStyleString{cs.Content, cs.Pos + 1}
+		t := parse_source_name(tmpPos, last, db)
+		if t.Pos != tmpPos.Pos {
 			cs.Pos = t.Pos
 		}
 	} else if c == 'D' {
@@ -4651,6 +4665,7 @@ func parse_alignof_expr(first, last *CStyleString, db *Db) *CStyleString {
 // line 1891
 func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
+	cs.dbgPrint("parse_type first:")
 	
 	if first.Pos == last.Pos {
 		return cs
@@ -5031,6 +5046,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 		}
 	}
 	
+	cs.dbgPrint("parse_type return:")
 	return cs
 }
 
