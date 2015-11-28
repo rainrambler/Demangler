@@ -146,10 +146,6 @@ func (p *Db) subs_pop_back() {
 	p.subs.content = p.subs.content[:size - 1]
 }
 
-func (p *Db) subs_push_back(st sub_type) {
-	p.subs.content = append(p.subs.content, st)
-}
-
 func (p *Db) subs_push_back_pair(sp string_pair) {
 	var st sub_type
 	st.content = append(st.content, sp)
@@ -4748,8 +4744,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 						}
 					}
 					
-					arr := db.subs_back().content
-					arr = append(arr, db.names.content[k])
+					db.subs_back().push_back(db.names.content[k])
 				}
 				
 				cs.Pos = t1.Pos
@@ -4759,10 +4754,11 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 		return cs
 	} else {
 		t := parse_builtin_type(first, last, db)
-		if first.Pos != t.Pos {
+		if !first.equals(t) {
 			cs.Pos = t.Pos
 		} else {
-			c := first.Content[0]
+			c := first.curChar()
+			cs.dbgPrint("parse_type not builtin first:")
 			
 			if c == 'A' {
 				t = parse_array_type(first, last, db)
@@ -4844,7 +4840,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 						}
 						
 						db.names.content[k].first += "&&"
-						db.subs_back().content = append(db.subs_back().content, db.names.content[k])
+						db.subs_back().push_back(db.names.content[k])
 					}
 					
 					cs.Pos = t.Pos
@@ -4873,7 +4869,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 						} else {
 							db.names.content[k].first = "id" + db.names.content[k].first[11:]
 						}
-						db.subs_back().content = append(db.subs_back().content, db.names.content[k])
+						db.subs_back().push_back(db.names.content[k])
 					}
 					
 					cs.Pos = t.Pos
@@ -4898,7 +4894,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 						}
 						
 						db.names.content[k].first += "&"
-						db.subs_back().content = append(db.subs_back().content, db.names.content[k])
+						db.subs_back().push_back(db.names.content[k])
 					}
 					
 					cs.Pos = t.Pos
@@ -4911,7 +4907,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				if t.Pos != first.Pos {
 					// ??? db.subs.emplace_back(db.names.get_allocator());
 					for k := k0; k < k1; k++ {
-						db.subs_back().content = append(db.subs_back().content, db.names.content[k])
+						db.subs_back().push_back(db.names.content[k])
 					}
 					
 					if db.try_to_parse_template_args && (k1 == (k0 + 1)) {
@@ -4969,7 +4965,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				}
 				return cs
 			} else if c == 'S' {
-				if ((first.Pos + 1) != last.Pos) && (first.nextChar() == 't') {
+				if !first.isNext(last) && (first.nextChar() == 't') {
 					t := parse_name(first, last, db, nil)
 					if t.Pos != first.Pos {
 						if db.names_size() == 0 {
