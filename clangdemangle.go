@@ -2997,46 +2997,67 @@ func parse_builtin_type(first, last *CStyleString, db *Db) *CStyleString {
 	c := first.curChar()
 	if c == 'v' {
 		db.names_push_back("void")
+		cs.Pos++
 	} else if c == 'w' {
 		db.names_push_back("wchar_t")
+		cs.Pos++
 	} else if c == 'b' {
 		db.names_push_back("bool")
+		cs.Pos++
 	} else if c == 'c' {
 		db.names_push_back("char")
+		cs.Pos++
 	} else if c == 'a' {
 		db.names_push_back("signed char")
+		cs.Pos++
 	} else if c == 'h' {
 		db.names_push_back("unsigned char")
+		cs.Pos++
 	} else if c == 's' {
 		db.names_push_back("short")
+		cs.Pos++
 	} else if c == 't' {
 		db.names_push_back("unsigned short")
+		cs.Pos++
 	} else if c == 'i' {
 		db.names_push_back("int")
+		cs.Pos++
 	} else if c == 'j' {
 		db.names_push_back("unsigned int")
+		cs.Pos++
 	} else if c == 'l' {
 		db.names_push_back("long")
+		cs.Pos++
 	} else if c == 'm' {
 		db.names_push_back("unsigned long")
+		cs.Pos++
 	} else if c == 'x' {
 		db.names_push_back("long long")
+		cs.Pos++
 	} else if c == 'y' {
 		db.names_push_back("unsigned long long")
+		cs.Pos++
 	} else if c == 'n' {
 		db.names_push_back("__int128")
+		cs.Pos++
 	} else if c == 'o' {
 		db.names_push_back("unsigned __int128")
+		cs.Pos++
 	} else if c == 'f' {
 		db.names_push_back("float")
+		cs.Pos++
 	} else if c == 'd' {
 		db.names_push_back("double")
+		cs.Pos++
 	} else if c == 'e' {
 		db.names_push_back("long double")
+		cs.Pos++
 	} else if c == 'g' {
 		db.names_push_back("__float128")
+		cs.Pos++
 	} else if c == 'z' {
 		db.names_push_back("...")
+		cs.Pos++
 	} else if c == 'u' {
 		tmpPos := &CStyleString{cs.Content, cs.Pos + 1}
 		t := parse_source_name(tmpPos, last, db)
