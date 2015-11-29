@@ -5055,6 +5055,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 							return cs
 						}
 						
+						db.subs_push_back_pair(*db.names_back())
 						cs.Pos = t.Pos
 					}
 				}
