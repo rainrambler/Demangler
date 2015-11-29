@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"fmt"
 	"encoding/binary"
 	"math"
@@ -42,6 +43,12 @@ func (p *string_pair) second_back() byte {
 	}
 	
 	return p.second[size - 1] // the last
+}
+
+// for debug
+func (p *string_pair) dbgPrint(prefix string) {
+	fmt.Printf(prefix + " First: %v, Second: %v\n", 
+		p.first, p.second)
 }
 
 type sub_type struct {
@@ -779,8 +786,7 @@ func parse_encoding(first, last *CStyleString, db *Db) *CStyleString {
 		db.names_back().first += ")"
 		if (cv1 & 1) != 0 {
 			db.names_back().first += " const"
-		}
-            
+		}            
         if (cv1 & 2) != 0 {
 			db.names_back().first += " volatile"
 		}
@@ -793,7 +799,6 @@ func parse_encoding(first, last *CStyleString, db *Db) *CStyleString {
 		} else if (ref1 == 2) {
 			db.names_back().first += " &&"
 		}
-                        
         db.names_back().first += ret2
 		db.tag_templates = sb2
 		cs.Pos = t.Pos
@@ -2618,6 +2623,67 @@ func parse_unnamed_type_name(first, last *CStyleString, db *Db) *CStyleString {
 	return cs
 }
 
+func trim_matched_templ(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	
+	size := len(s)
+	if s[size - 1] != '>' {
+		return s
+	}
+	
+	pos := size - 1
+	depth := 1
+	for pos > 0 {
+		pos--
+		if s[pos] == '<' {
+			depth--
+			if depth == 0 {
+				pos--
+				break
+			}
+		} else if s[pos] == '>' {
+			depth++
+		} else {
+			
+		}
+	}
+	
+	if pos == 0 {
+		return ""
+	}
+	
+	return s[:pos]
+}
+
+func base_name(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	
+	if (s == "std::string"){
+        return "basic_string"
+    }
+    if (s == "std::istream"){
+        return "basic_istream"
+    }
+    if (s == "std::ostream"){
+        return "basic_ostream"
+    }
+    if (s == "std::iostream"){
+        return "basic_iostream"
+    }
+	
+	tmp := s
+	if s[len(s) - 1] == '>' {
+		tmp = trim_matched_templ(s)
+	}
+	
+	pos := strings.LastIndex(tmp, ":")
+	return tmp[pos+1:]
+}
+
 // <ctor-dtor-name> ::= C1    # complete object constructor
 //                  ::= C2    # base object constructor
 //                  ::= C3    # complete object allocating constructor
@@ -2646,7 +2712,7 @@ func parse_ctor_dtor_name(first, last *CStyleString, db *Db) *CStyleString {
 				return cs
 			}
 			
-			db.names_push_back(db.names_back().first)
+			db.names_push_back(base_name(db.names_back().first))
 			cs.Pos += 2
 			db.parsed_ctor_dtor_cv = true
 		}
@@ -2729,13 +2795,13 @@ func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool
 	if t0.curChar() == 'N' {
 		t1 := parse_nested_name(t0, last, db, ends_with_template_args)
 		
-		if t1.Pos != t0.Pos {
+		if !t1.equals(t0) {
 			cs.Pos = t1.Pos
 		}
 	} else if t0.curChar() == 'Z' {
 		t1 := parse_local_name(t0, last, db, ends_with_template_args)
 		
-		if t1.Pos != t0.Pos {
+		if !t1.equals(t0) {
 			cs.Pos = t1.Pos
 		}
 	} else {
@@ -2746,7 +2812,7 @@ func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool
 				// <unscoped-template-name> <template-args>
 				if db.names_empty() {
 					return cs
-				}
+				}				
 				
 				db.subs_push_back_pair(*db.names_back())
 				t0.Pos = t1.Pos
@@ -2771,7 +2837,7 @@ func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool
 		} else {
 			// try <substitution> <template-args>
 			t1 = parse_substitution(t0, last, db)
-			if !t1.equals(t0) && !t1.equals(last) && (t1.curChar() == 'I') {
+			if t1.notEach(t0, last) && (t1.curChar() == 'I') {
 				t0.Pos = t1.Pos
 				t1 = parse_template_args(t0, last, db)
 				
@@ -4679,6 +4745,28 @@ func parse_alignof_expr(first, last *CStyleString, db *Db) *CStyleString {
 	return cs
 }
 
+// <type> ::= <builtin-type>
+//        ::= <function-type>
+//        ::= <class-enum-type>
+//        ::= <array-type>
+//        ::= <pointer-to-member-type>
+//        ::= <template-param>
+//        ::= <template-template-param> <template-args>
+//        ::= <decltype>
+//        ::= <substitution>
+//        ::= <CV-qualifiers> <type>
+//        ::= P <type>        # pointer-to
+//        ::= R <type>        # reference-to
+//        ::= O <type>        # rvalue reference-to (C++0x)
+//        ::= C <type>        # complex pair (C 2000)
+//        ::= G <type>        # imaginary (C 2000)
+//        ::= Dp <type>       # pack expansion (C++0x)
+//        ::= U <source-name> <type>  # vendor extended type qualifier
+// extension := U <objc-name> <objc-type>  # objc-type<identifier>
+// extension := <vector-type> # <vector-type> starts with Dv
+
+// <objc-name> ::= <k0 number> objcproto <k1 number> <identifier>  # k0 = 9 + <number of digits in k1> + k1
+// <objc-type> := <source-name>  # PU<11+>objcproto 11objc_object<source-name> 11objc_object -> id<source-name>
 // line 1891
 func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
