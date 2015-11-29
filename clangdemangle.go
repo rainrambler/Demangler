@@ -159,6 +159,11 @@ func (p *Db) subs_push_back_pair(sp string_pair) {
 	p.subs.content = append(p.subs.content, st)
 }
 
+func (p *Db) subs_emplace_back() {
+	var t sub_type
+	p.subs.content = append(p.subs.content, t)
+}
+
 func (p *Db) names_pop_back() {
 	size := len(p.names.content)
 	if size == 0 {
@@ -185,6 +190,11 @@ func (p *Db) subs_back() *sub_type {
 		return nil
 	}
 	return &p.subs.content[size - 1] // the last
+}
+
+func (p *Db) template_param_emplace_back() {
+	var t template_param_type
+	p.template_param.content = append(p.template_param.content, t)
 }
 
 // the last template_params
@@ -916,7 +926,7 @@ func parse_template_args(first, last *CStyleString, db *Db) *CStyleString {
 		if db.tag_templates {
 			//db.template_param ???
 			// db.template_param.emplace_back(db.names.get_allocator());
-			
+			db.template_param_emplace_back()
 		}
 		
 		k0 := db.names_size()
@@ -1858,7 +1868,7 @@ func parse_array_type(first, last *CStyleString, db *Db) *CStyleString {
 // line 3082
 func parse_unqualified_name(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
-	cs.dbgPrint("parse_unqualified_name first:")
+	//cs.dbgPrint("parse_unqualified_name first:")
 	
 	if first.equals(last) {
 		return cs
@@ -1888,7 +1898,7 @@ func parse_unqualified_name(first, last *CStyleString, db *Db) *CStyleString {
 		}
 	}
 	
-	cs.dbgPrint("parse_unqualified_name return:")
+	//cs.dbgPrint("parse_unqualified_name return:")
 	return cs
 }
 
@@ -2738,7 +2748,7 @@ func parse_ctor_dtor_name(first, last *CStyleString, db *Db) *CStyleString {
 // line 3122
 func parse_unscoped_name(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
-	cs.dbgPrint("parse_unscoped_name first:")
+	//cs.dbgPrint("parse_unscoped_name first:")
 	
 	if last.calcDelta(first) < 2 {
 		return first
@@ -2767,7 +2777,7 @@ func parse_unscoped_name(first, last *CStyleString, db *Db) *CStyleString {
 		cs.Pos = t1.Pos
 	}
 	
-	cs.dbgPrint("parse_unscoped_name return:")
+	//cs.dbgPrint("parse_unscoped_name return:")
 	return cs
 }
 
@@ -2781,7 +2791,7 @@ func parse_unscoped_name(first, last *CStyleString, db *Db) *CStyleString {
 // line 4174
 func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
-	cs.dbgPrint("parse_name first:")
+	//cs.dbgPrint("parse_name first:")
 	
 	if last.calcDelta(first) < 2 {
 		return cs
@@ -2858,7 +2868,7 @@ func parse_name(first, last *CStyleString, db *Db, ends_with_template_args *bool
 		}
 	}
 	
-	cs.dbgPrint("parse_name return:")
+	//cs.dbgPrint("parse_name return:")
 	return cs
 }
 
@@ -3049,9 +3059,8 @@ func parse_unresolved_type(first, last *CStyleString, db *Db) *CStyleString {
 //                ::= u <source-name>    # vendor extended type
 func parse_builtin_type(first, last *CStyleString, db *Db) *CStyleString {	
 	cs := &CStyleString{first.Content, first.Pos}
-	cs.dbgPrint("parse_builtin_type first:")
-	last.dbgPrint("parse_builtin_type last:")
-	
+	//cs.dbgPrint("parse_builtin_type first:")
+
 	if first.Pos == last.Pos {
 		return cs
 	}
@@ -4770,7 +4779,7 @@ func parse_alignof_expr(first, last *CStyleString, db *Db) *CStyleString {
 // line 1891
 func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 	cs := &CStyleString{first.Content, first.Pos}
-	cs.dbgPrint("parse_type first:")
+	//cs.dbgPrint("parse_type first:")
 	
 	if first.Pos == last.Pos {
 		return cs
@@ -4793,6 +4802,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				}
 				
 				// ??? db.subs.emplace_back(db.names.get_allocator());
+				db.subs_emplace_back()
 				for k := k0; k < k1; k++ {
 					if is_function {
 						p := len(db.names.content[k].second)
@@ -4846,7 +4856,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 			cs.Pos = t.Pos
 		} else {
 			c := first.curChar()
-			cs.dbgPrint("parse_type not builtin first:")
+			//cs.dbgPrint("parse_type not builtin first:")
 			
 			if c == 'A' {
 				t = parse_array_type(first, last, db)
@@ -4916,6 +4926,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				
 				if t.Pos != cs.Pos {
 					// ??? db.subs.emplace_back(db.names.get_allocator());
+					db.subs_emplace_back()
 					for k := k0; k < k1; k++ {
 						s := db.names.content[k].second
 						
@@ -4941,6 +4952,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				
 				if t.Pos != cs.Pos {
 					// ??? db.subs.emplace_back(db.names.get_allocator());
+					db.subs_emplace_back()
 					for k := k0; k < k1; k++ {
 						s := db.names.content[k].second
 						
@@ -4970,10 +4982,11 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				
 				if t.Pos != cs.Pos {
 					// ??? db.subs.emplace_back(db.names.get_allocator());
+					db.subs_emplace_back()
 					for k := k0; k < k1; k++ {
 						s := db.names.content[k].second
 						
-						if s[:2] == " [" {
+						if (len(s) >= 2) && (s[:2] == " [") {
 							db.names.content[k].first += " ("
 							db.names.content[k].second = ")" + s
 						} else if (len(s) > 0) && (s[0] == '(') {
@@ -4994,6 +5007,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				
 				if t.Pos != first.Pos {
 					// ??? db.subs.emplace_back(db.names.get_allocator());
+					db.subs_emplace_back()
 					for k := k0; k < k1; k++ {
 						db.subs_back().push_back(db.names.content[k])
 					}
@@ -5152,7 +5166,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 		}
 	}
 	
-	cs.dbgPrint("parse_type return:")
+	//cs.dbgPrint("parse_type return:")
 	return cs
 }
 
