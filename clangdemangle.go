@@ -63,6 +63,11 @@ type template_param_type struct {
 	content []sub_type
 }
 
+func (p *template_param_type) emplace_back() {
+	var t sub_type
+	p.content = append(p.content, t)
+}
+
 func (p *template_param_type) empty() bool {
 	return len(p.content) == 0
 }
@@ -917,15 +922,14 @@ func parse_template_args(first, last *CStyleString, db *Db) *CStyleString {
 	}
 	
 	if db.tag_templates {
-		db.template_param_back().content = []sub_type{} // clear		
+		// db.template_param.back().clear();
+		db.template_param_back().content = []sub_type{}
 	}
 	
 	t := &CStyleString{cs.Content, cs.Pos + 1}
 	args := "<"
 	for t.curChar() != 'E' {
 		if db.tag_templates {
-			//db.template_param ???
-			// db.template_param.emplace_back(db.names.get_allocator());
 			db.template_param_emplace_back()
 		}
 		
@@ -942,6 +946,7 @@ func parse_template_args(first, last *CStyleString, db *Db) *CStyleString {
 		}
 		
 		if db.tag_templates {
+			db.template_param_back().emplace_back()
 			for k := k0; k < k1; k++ {
 				db.template_param_back_back().push_back(db.names.content[k])
 			}
@@ -969,8 +974,7 @@ func parse_template_args(first, last *CStyleString, db *Db) *CStyleString {
 		args += " >"
 	}
 	
-	db.names_push_back(args)
-	
+	db.names_push_back(args)	
 	return cs
 }
 
@@ -1764,6 +1768,20 @@ func parse_number(first, last *CStyleString) *CStyleString {
 	return cs
 }
 
+func substr(s string, startPos, size int) string {
+	actuallen := len(s)
+	
+	if actuallen <= startPos {
+		return ""
+	}
+	
+	if (startPos + size) >= actuallen {
+		return s[startPos:]
+	} else {
+		return s[startPos:startPos+size]
+	}
+}
+
 // <array-type> ::= A <positive dimension number> _ <element type>
 //              ::= A [<dimension expression>] _ <element type>
 func parse_array_type(first, last *CStyleString, db *Db) *CStyleString {
@@ -1786,7 +1804,7 @@ func parse_array_type(first, last *CStyleString, db *Db) *CStyleString {
 				return cs
 			}
 			
-			if db.names_back().second[:2] == " [" {
+			if substr(db.names_back().second, 0, 2) == " [" {
 				// erase(0, 1)
 				db.names_back().second = db.names_back().second[1:]
 			}
@@ -1809,7 +1827,7 @@ func parse_array_type(first, last *CStyleString, db *Db) *CStyleString {
 					return cs
 				}
 				
-				if db.names_back().second[:2] == " [" {
+				if substr(db.names_back().second, 0, 2) == " [" {
 					db.names_back().second = db.names_back().second[1:]
 				}
 				
@@ -1929,8 +1947,8 @@ func parse_nested_name(first, last *CStyleString, db *Db, ends_with_template_arg
 	}
 	
 	cv := 0
-	cs.Pos++
-	t0 := parse_cv_qualifiers(cs, last, &cv)
+	tmpPos := &CStyleString{first.Content, first.Pos + 1}
+	t0 := parse_cv_qualifiers(tmpPos, last, &cv)
 	if t0.equals(last) {
 		return cs
 	}
@@ -1954,7 +1972,7 @@ func parse_nested_name(first, last *CStyleString, db *Db, ends_with_template_arg
 	
 	if t0.equals(last) {
 		db.names_pop_back()
-		return first
+		return cs
 	}
 	
 	pop_subs := false
@@ -1964,7 +1982,7 @@ func parse_nested_name(first, last *CStyleString, db *Db, ends_with_template_arg
 		var t1 *CStyleString
 		
 		if t0.curChar() == 'S' {
-			if !t0.isNext(last) && t0.nextChar() == 't' {
+			if !t0.isNext(last) && (t0.nextChar() == 't') {
 				// do_parse_unqualified_name
 				t1 = parse_unqualified_name(t0, last, db)
 				if !t1.equals(t0) && !t1.equals(last) {
@@ -4624,7 +4642,7 @@ func parse_conversion_expr(first, last *CStyleString, db *Db) *CStyleString {
 			
 			if (t.curChar() == 'E') {
 				// db.names.emplace_back();
-				
+				db.names_emplace_back()
 			} else {
 				first_expr := true
 				for t.curChar() != 'E' {
@@ -4801,7 +4819,6 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 					db.subs_pop_back()
 				}
 				
-				// ??? db.subs.emplace_back(db.names.get_allocator());
 				db.subs_emplace_back()
 				for k := k0; k < k1; k++ {
 					if is_function {
