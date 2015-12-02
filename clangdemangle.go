@@ -28,7 +28,6 @@ func (p *string_pair) full() string {
 	return (p.first) + (p.second)
 }
 
-// ???
 func (p *string_pair) move_full() string {
 	return (p.first) + (p.second)
 }
@@ -277,7 +276,7 @@ func cxa_demangle(mangledname string, status *int) string {
     db.encoding_depth = 0
     db.parsed_ctor_dtor_cv = false
     db.tag_templates = true
-	db.template_param_emplace_back() // ??? 
+	db.template_param_emplace_back()
 	db.fix_forward_references = false
     db.try_to_parse_template_args = true
 	internal_status := success
@@ -435,7 +434,7 @@ func parse_template_param(first, last *CStyleString, db *Db) *CStyleString {
 		lastItem := db.template_param_back()
 		if len(lastItem.content) > 0 {
 			for _, item := range lastItem.content[0].content {
-				db.names_push_back(item.first) // ???
+				db.names_push_back(item.first)
 			}
 			cs.Pos += 2
 		} else {
@@ -463,7 +462,7 @@ func parse_template_param(first, last *CStyleString, db *Db) *CStyleString {
 		size := len(db.template_param_back().content)
 		if sub < size {
 			for _, item := range db.template_param_back().content[sub].content {
-				db.names_push_back(item.first) // ???
+				db.names_push_back(item.first)
 			}
 			
 			cs.Pos = t.Pos + 1
@@ -1859,7 +1858,6 @@ func parse_array_type(first, last *CStyleString, db *Db) *CStyleString {
 					db.names_back().second = db.names_back().second[1:]
 				}
 				
-				// " [" + typename C::String(first+1, t) + "]" ???
 				tn := " [" + first.Content[first.Pos + 1:t.Pos] + "]"
 				db.names_back().second = tn + db.names_back().second
 				cs.Pos = t2.Pos
@@ -2173,7 +2171,7 @@ func parse_local_name(first, last *CStyleString, db *Db, ends_with_template_args
 		return cs
 	}
 	
-	t.Pos++ // ???
+	t.Pos++
 	c := t.curChar()
 	switch c {
 		case 's':
@@ -2968,7 +2966,6 @@ func parse_substitution(first, last *CStyleString, db *Db) *CStyleString {
 		break
 		case '_':
 		if !db.subs_empty() {
-			// ???
 			for _, n := range db.subs.content[0].content {
 				db.names_push_back(n.first)
 			}
@@ -4914,7 +4911,6 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 					
 					cs.Pos = t.Pos
 					db.subs_push_back_pair(*db.names_back())
-					// ??? db.subs.push_back(typename C::sub_type(1, db.names.back(), db.names.get_allocator()));
 				}
 			} else if c == 'C' {
 				cs.Pos++
@@ -4922,7 +4918,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				
 				if t.Pos != cs.Pos {
 					if db.names_size() == 0 {
-						return first // or cs???						
+						return first
 					}
 					
 					db.names_back().first += " complex"
@@ -4934,7 +4930,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				
 				if t.Pos != cs.Pos {
 					if db.names_size() == 0 {
-						return first // or cs???						
+						return first						
 					}
 					
 					cs.Pos = t.Pos
@@ -4946,7 +4942,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				
 				if t.Pos != cs.Pos {
 					if db.names_size() == 0 {
-						return first // or cs???						
+						return first					
 					}
 					
 					db.names_back().first += " imaginary"
@@ -4958,7 +4954,7 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				
 				if t.Pos != cs.Pos {
 					if db.names_size() == 0 {
-						return first // or cs???						
+						return first				
 					}
 					
 					cs.Pos = t.Pos
@@ -4971,7 +4967,6 @@ func parse_type(first, last *CStyleString, db *Db) *CStyleString {
 				k1 := db.names_size()
 				
 				if t.Pos != cs.Pos {
-					// ??? db.subs.emplace_back(db.names.get_allocator());
 					db.subs_emplace_back()
 					for k := k0; k < k1; k++ {
 						s := db.names.content[k].second
