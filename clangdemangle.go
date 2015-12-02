@@ -2,7 +2,6 @@ package main
 
 import (
 	"strings"
-	"fmt"
 	"encoding/binary"
 	"math"
 )
@@ -47,8 +46,8 @@ func (p *string_pair) second_back() byte {
 
 // for debug
 func (p *string_pair) dbgPrint(prefix string) {
-	fmt.Printf(prefix + " First: %v, Second: %v\n", 
-		p.first, p.second)
+	//fmt.Printf(prefix + " First: %v, Second: %v\n", 
+	//	p.first, p.second)
 }
 
 type sub_type struct {
@@ -83,8 +82,8 @@ type CStyleString struct {
 
 // for debug
 func (p *CStyleString) dbgPrint(prefix string) {
-	fmt.Printf(prefix + " Content: %v, Pos: %v, Start: %v\n", 
-		p.Content, p.Pos, p.Content[p.Pos:])
+	//fmt.Printf(prefix + " Content: %v, Pos: %v, Start: %v\n", 
+	//	p.Content, p.Pos, p.Content[p.Pos:])
 }
 
 func (p *CStyleString) curChar() byte {
@@ -2009,9 +2008,7 @@ func parse_nested_name(first, last *CStyleString, db *Db, ends_with_template_arg
 	for t0.curChar() != 'E' {
 		component_ends_with_template_args = false
 		var t1 *CStyleString
-		
-		fmt.Printf("parse_nested_name: cur char: %c\n", t0.curChar())
-		
+				
 		if t0.curChar() == 'S' {
 			if !t0.isNext(last) && (t0.nextChar() == 't') {
 				// do_parse_unqualified_name
