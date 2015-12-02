@@ -249,6 +249,28 @@ func (p *Db) names_back() *string_pair {
 	return &p.names.content[size - 1] // the last
 }
 
+const alignment = 16
+const bs = 4 * 1024
+
+type arena struct {
+	buf_  [bs]byte
+	ptr   *byte
+	ptr_  int
+}
+
+func (p *arena) pointer_in_buffer(pos int) bool {
+	return (pos >= 0) && (pos <= bs)
+}
+
+func (p *arena) align_up(n int) int {
+	m := n % alignment
+	return n - m + alignment
+}
+
+func (p *arena) size() int {
+	return bs
+}
+
 func cxa_demangle(mangledname string, status *int) string {
 	var db Db
 	db.cv = 0
@@ -256,6 +278,7 @@ func cxa_demangle(mangledname string, status *int) string {
     db.encoding_depth = 0
     db.parsed_ctor_dtor_cv = false
     db.tag_templates = true
+	db.template_param_emplace_back() // ??? 
 	db.fix_forward_references = false
     db.try_to_parse_template_args = true
 	internal_status := success
