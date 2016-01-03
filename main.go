@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	//"fmt"
+	"os"
 )
 
 func demanglefunc(s, want string) {
@@ -12,6 +12,15 @@ func demanglefunc(s, want string) {
 }
 
 func main() {
-	//demanglefunc("_ZNSt8ios_base4InitC1Ev", "std::ios_base::Init::Init()")
-	demanglefunc("_ZplR1XS0_", "operator+(X&, X&)")
+	argsWithProg := os.Args
+	if len(argsWithProg) < 2 {
+		fmt.Println("Usage: Demangler [MangledName]")
+		fmt.Println("eg: demangler _ZNSt8ios_base4InitC1Ev")
+		return
+	}
+	
+	mangledname := argsWithProg[1]
+	stat := 0
+	unmangled := cxa_demangle(mangledname, &stat)
+	fmt.Println(unmangled)
 }

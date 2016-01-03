@@ -4,6 +4,7 @@ import (
 	"strings"
 	"encoding/binary"
 	"math"
+	"fmt"
 )
 
 const
@@ -45,8 +46,8 @@ func (p *string_pair) second_back() byte {
 
 // for debug
 func (p *string_pair) dbgPrint(prefix string) {
-	//fmt.Printf(prefix + " First: %v, Second: %v\n", 
-	//	p.first, p.second)
+	fmt.Printf(prefix + " First: %v, Second: %v\n", 
+		p.first, p.second)
 }
 
 type sub_type struct {
